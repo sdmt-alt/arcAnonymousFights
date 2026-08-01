@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>个人资料 - Arcaea Anonymous Battles</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Arcaea Anonymous Battles</a>
+      <nav>
+        <a href="/">主页</a>
+                <a href="/battlelist.html">无名战列表</a>
+<a href="/submit.html">提交谱面</a>
+        <a href="/profile.html">个人资料</a>
+        <a class="admin-nav hidden" href="/admin.html">管理员后台</a>
+      </nav>
+      <button class="account-chip" id="accountChip" type="button">
+        <img id="accountAvatar" src="/assets/avatar-placeholder.svg" alt="当前账户头像">
+        <span id="accountName">未登录</span>
+      </button>
+    </header>
+
+    <main class="page-stack">
+      <section class="profile-head">
+        <img id="profileAvatar" src="/assets/avatar-placeholder.svg" alt="头像">
+        <div>
+          <p class="eyebrow">Profile</p>
+          <h1 id="profileTitle">个人资料</h1>
+          <p id="profileSubtitle">维护你的公开资料，查看谱面提交和合作申请。</p>
+        </div>
+        <div class="profile-actions">
+          <button id="openProfileEditButton" type="button">修改资料</button>
+          <button class="ghost-button" id="visitorPreviewButton" type="button">访客视角</button>
+        </div>
+      </section>
+
+      <div class="modal-backdrop hidden" id="profileEditModal">
+        <div class="modal-panel profile-edit-panel">
+          <div class="modal-heading">
+            <h2>修改资料</h2>
+            <div class="button-row no-margin">
+              <button class="ghost-button compact" id="openPasswordModalButton" type="button">修改密码</button>
+              <button class="ghost-button compact" id="closeProfileEditButton" type="button">关闭</button>
+            </div>
+          </div>
+          <section class="dashboard-grid">
+            <div>
+              <h2>资料信息</h2>
+              <form id="profileForm">
+                <label>用户名<input name="username" readonly required></label>
+                <label>谱师名义<input name="chartName" readonly required></label>
+                <label>头像<input name="avatar" type="file" accept="image/*"></label>
+                <label>Bilibili 空间<input name="bilibili" placeholder="https://space.bilibili.com/..."></label>
+                <label>简介<textarea name="bio" rows="4"></textarea></label>
+                <label class="checkbox-row"><input name="showSubmissions" type="checkbox">在公开资料页展示我的投稿谱面</label>
+                <button type="submit">保存资料</button>
+                <p class="message" id="profileMessage"></p>
+              </form>
+            </div>
+            <div>
+              <h2>谱师名义修改申请</h2>
+              <form id="chartNameRequestForm">
+                <label>欲变更为<input name="requestedChartName" required></label>
+                <label>变更理由<textarea name="reason" rows="4"></textarea></label>
+                <button type="submit">提交申请</button>
+                <p class="message" id="chartRequestMessage"></p>
+              </form>
+              <div class="submission-list compact-list" id="myChartRequests"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="modal-backdrop hidden" id="passwordModal">
+        <div class="modal-panel">
+          <div class="modal-heading">
+            <h2>修改密码</h2>
+            <button class="ghost-button compact" id="closePasswordModalButton" type="button">关闭</button>
+          </div>
+          <form id="passwordForm">
+            <label>旧密码<input name="oldPassword" type="password" autocomplete="current-password" required></label>
+            <label>新密码<input name="newPassword" type="password" autocomplete="new-password" minlength="6" required></label>
+            <label>重复新密码<input name="confirmPassword" type="password" autocomplete="new-password" minlength="6" required></label>
+            <button type="submit">修改密码</button>
+            <p class="message" id="passwordMessage"></p>
+          </form>
+        </div>
+      </div>
+      <section class="panel">
+        <div class="panel-heading">
+          <p class="eyebrow">Charter Groups</p>
+          <h2>我的谱师组</h2>
+        </div>
+        <div class="selected-list" id="profileGroupList"></div>
+      </section>
+
+      <section class="panel hidden" id="profileHostedBattlePanel">
+        <div class="panel-heading">
+          <p class="eyebrow">Hosted Anonymous Battles</p>
+          <h2>主催无名战</h2>
+        </div>
+        <div class="battle-directory" id="profileHostedBattleList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading action-heading">
+          <div><p class="eyebrow">Collaboration Requests</p><h2>合作申请</h2></div>
+          <button class="ghost-button compact" id="clearProcessedCollaborationButton" type="button">清除已处理请求</button>
+        </div>
+        <div class="submission-list" id="collaborationRequestList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <p class="eyebrow">My Charts</p>
+          <h2>我的提交谱面</h2>
+        </div>
+        <div class="submission-list" id="mySubmissionList"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

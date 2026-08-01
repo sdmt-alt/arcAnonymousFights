@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>管理员后台 - Arcaea Anonymous Battles</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Arcaea Anonymous Battles</a>
+      <nav>
+        <a href="/">主页</a>
+                <a href="/battlelist.html">无名战列表</a>
+<a href="/submit.html">提交谱面</a>
+        <a href="/profile.html">个人资料</a>
+        <a class="admin-nav hidden" href="/admin.html">管理员后台</a>
+      </nav>
+      <button class="account-chip" id="accountChip" type="button">
+        <img id="accountAvatar" src="/assets/avatar-placeholder.svg" alt="当前账户头像">
+        <span id="accountName">未登录</span>
+      </button>
+    </header>
+
+    <main class="page-stack">
+      <section class="admin-head">
+        <p class="eyebrow">Admin</p>
+        <h1>管理员后台</h1>
+        <p>生成注册验证码，审核谱面和谱师名义申请，并维护主页合集、日程与无名战比赛。</p>
+      </section>
+
+      <section class="panel hidden" id="adminLocked">
+        <h2>需要管理员登录</h2>
+        <p class="message">请使用预置管理员账号登录后访问后台。</p>
+      </section>
+
+      <section class="dashboard-grid hidden" id="adminDashboard">
+        <div class="panel">
+          <div class="panel-heading action-heading">
+            <div><p class="eyebrow">Codes</p><h2>注册验证码</h2></div>
+            <div class="button-row no-margin">
+              <button id="generateCodeButton" type="button">生成验证码</button>
+              <button class="ghost-button" id="clearInvalidCodesButton" type="button">清空失效验证码</button>
+            </div>
+          </div>
+          <p class="message" id="codeMessage"></p>
+          <div class="scroll-box"><div class="submission-list compact-list" id="codeList"></div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading"><p class="eyebrow">Name Requests</p><h2>谱师名义修改申请</h2></div>
+          <div class="scroll-box"><div class="submission-list compact-list" id="adminChartRequests"></div></div>
+        </div>
+      </section>
+
+      <section class="dashboard-grid hidden" id="adminContentTools">
+        <div class="panel">
+          <div class="panel-heading"><p class="eyebrow">Collections</p><h2>往届谱面合集</h2></div>
+          <form id="collectionForm">
+            <input type="hidden" name="id">
+            <label>标题<input name="title" required></label>
+            <label>超链接<input name="link" type="url" placeholder="https://..." required></label>
+            <label>封面图片<input name="cover" type="file" accept="image/*"></label>
+            <div class="button-row">
+              <button type="submit">保存合集</button>
+              <button class="ghost-button" id="resetCollectionButton" type="button">新建</button>
+            </div>
+            <p class="message" id="collectionMessage"></p>
+          </form>
+          <div class="scroll-box"><div class="submission-list compact-list" id="adminCollectionList"></div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading"><p class="eyebrow">Schedule</p><h2>活动日程</h2></div>
+          <form id="scheduleForm">
+            <input type="hidden" name="id">
+            <label>区间名称<input name="name" required></label>
+            <label>备注<textarea name="note" rows="3"></textarea></label>
+            <div class="form-row">
+              <label>起始时间<input name="startTime" type="datetime-local" required></label>
+              <label>结束时间<input name="endTime" type="datetime-local" required></label>
+            </div>
+            <div class="button-row">
+              <button type="submit">保存日程</button>
+              <button class="ghost-button" id="resetScheduleButton" type="button">新建</button>
+            </div>
+            <p class="message" id="scheduleMessage"></p>
+          </form>
+          <div class="scroll-box"><div class="submission-list compact-list" id="adminScheduleList"></div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading"><p class="eyebrow">Backgrounds</p><h2>现有 bg 名</h2></div>
+          <form id="backgroundForm">
+            <label>bg 名<input name="name" pattern="[A-Za-z0-9_-]+" required></label>
+            <div class="button-row">
+              <button type="submit">添加 bg</button>
+            </div>
+            <p class="message" id="backgroundMessage"></p>
+          </form>
+          <div class="scroll-box"><div class="submission-list compact-list" id="adminBackgroundList"></div></div>
+        </div>
+      </section>
+
+      <section class="dashboard-grid hidden" id="adminBattleTools">
+        <div class="panel hidden" id="battleFormHolder">
+          <div class="panel-heading"><p class="eyebrow">Battles</p><h2>无名战比赛</h2></div>
+                    <form id="battleForm" enctype="multipart/form-data">
+            <input type="hidden" name="id">
+            <label>比赛标题<input name="title" required></label>
+            <label>简介<textarea name="description" rows="3"></textarea></label>
+            <label>Banner 图片<input name="banner" type="file" accept="image/*"></label>
+            <label>规则文档<input name="rules" type="file" accept=".pdf,application/pdf"></label>
+            <fieldset>
+              <legend>主催可修改项锁定</legend>
+              <label class="checkbox-row"><input name="lockDescription" type="checkbox">锁定简介</label>
+              <label class="checkbox-row"><input name="lockBanner" type="checkbox">锁定 Banner 图片</label>
+              <label class="checkbox-row"><input name="lockRules" type="checkbox">锁定规则文档</label>
+              <label class="checkbox-row"><input name="lockDurationCheck" type="checkbox">锁定曲目时长限制检查</label>
+              <label class="checkbox-row"><input name="lockDifficultyCheck" type="checkbox">锁定难度范围限制检查</label>
+              <label class="checkbox-row"><input name="lockNoEternalCheck" type="checkbox">锁定不启用 Eternal 难度</label>
+              <label class="checkbox-row"><input name="lockAffTypeCheck" type="checkbox">锁定 AFF 语句类型检查</label>
+              <label class="checkbox-row"><input name="lockAafAccNormalizeCheck" type="checkbox">锁定 AAF / ACC 标准化检查</label>
+            </fieldset>
+            <label>开放谱师组<select name="allowedGroupId" id="battleGroupSelect"><option value="">全部谱师</option></select></label>
+            <label>主催<select id="battleHostSelect" multiple size="5"></select></label>
+            <input type="hidden" name="hostUserIds" id="battleHostIds">
+            <fieldset>
+              <legend>投稿数量限制</legend>
+              <div class="form-row">
+                <label>个人<input name="soloLimit" type="number" min="0" placeholder="无限制"></label>
+                <label>合作<input name="collabLimit" type="number" min="0" placeholder="无限制"></label>
+              </div>
+              <label>Bonus<input name="bonusLimit" type="number" min="0" placeholder="无限制"></label>
+            </fieldset>
+            <fieldset>
+              <legend>Bonus排除检查</legend>
+              <label class="checkbox-row"><input name="durationEnabled" type="checkbox">启用曲目时长限制检查</label>
+              <div class="form-row">
+                <label>最短时长（秒）<input name="durationMin" type="number" min="0" step="0.1" placeholder="不限"></label>
+                <label>最长时长（秒）<input name="durationMax" type="number" min="0" step="0.1" placeholder="不限"></label>
+              </div>
+              <label class="checkbox-row"><input name="difficultyEnabled" type="checkbox">启用难度范围限制检查</label>
+              <div class="form-row">
+                <label>难度下限<input name="difficultyMin" placeholder="9"></label>
+                <label>难度上限<input name="difficultyMax" placeholder="11+"></label>
+              </div>
+              <label class="checkbox-row"><input name="affTypeCheck" type="checkbox">AFF语句类型检查</label>
+            </fieldset>
+            <fieldset>
+              <legend>AFF语句设置</legend>
+              <label class="checkbox-row"><input name="affAllowGreenSnake" type="checkbox">启用绿蛇</label>
+              <label class="checkbox-row"><input name="affAllowGraySnake" type="checkbox">启用灰蛇</label>
+              <label class="checkbox-row"><input name="affAllowSpecialHitsound" type="checkbox">启用特殊天键</label>
+              <label class="checkbox-row"><input name="affAllowDesignantRedLine" type="checkbox">启用Designant红线</label>
+              <label class="checkbox-row"><input name="affAllowSmoothness" type="checkbox">启用平滑度</label>
+              <label class="checkbox-row"><input name="affAllowFloatTapHold" type="checkbox">启用浮点Tap/Hold</label>
+              <label class="checkbox-row"><input name="affAllowSizeKey" type="checkbox">启用大小键</label>
+              <label class="checkbox-row"><input name="affAllowCamera" type="checkbox">启用Camera</label>
+              <label class="checkbox-row"><input name="affAllowTrackHideShow" type="checkbox">启用trackhide/trackshow</label>
+              <label class="checkbox-row"><input name="affAllowTrackDisplay" type="checkbox">启用trackdisplay</label>
+              <label class="checkbox-row"><input name="affAllowArcahvEffects" type="checkbox">启用Arcahv相关scenecontrol效果</label>
+              <label class="checkbox-row"><input name="affAllowHideGroup" type="checkbox">启用hidegroup</label>
+              <label class="checkbox-row"><input name="affAllowSixK" type="checkbox">启用6k</label>
+              <label class="checkbox-row"><input name="affAllowNoInput" type="checkbox">启用noinput</label>
+              <label class="checkbox-row"><input name="affAllowAngle" type="checkbox">启用angle</label>
+              <label class="checkbox-row"><input name="affAllowFadingHolds" type="checkbox">启用fadingholds</label>
+            </fieldset>
+            <fieldset>
+              <legend>可选自动检查</legend>
+              <label class="checkbox-row"><input name="noEternal" type="checkbox">不启用 Eternal 难度</label>
+              <label class="checkbox-row"><input name="aafAccNormalize" type="checkbox">AAF / ACC标准化检查</label>
+            </fieldset>
+            <fieldset>
+              <legend>参赛分组</legend>
+              <div class="radio-row">
+                <label><input type="radio" name="divisionMode" value="standard" checked>标准分组</label>
+                <label><input type="radio" name="divisionMode" value="custom">自定义分组</label>
+              </div>
+              <input type="hidden" name="customDivisions" id="battleCustomDivisions">
+              <div class="custom-division-editor hidden" id="battleCustomDivisionEditor"></div>
+              <button class="ghost-button compact hidden" id="battleAddCustomDivisionButton" type="button">添加分组</button>
+            </fieldset>
+            <div class="form-row">
+              <label>写谱开始时间<input name="writingStartTime" type="datetime-local" required></label>
+              <label>写谱结束时间<input name="writingEndTime" type="datetime-local" required></label>
+            </div>
+            <div class="form-row">
+              <label>整理开始时间<input name="packingStartTime" type="datetime-local" required></label>
+              <label>整理结束时间<input name="packingEndTime" type="datetime-local" required></label>
+            </div>
+            <div class="form-row">
+              <label>狙击开始时间<input name="snipingStartTime" type="datetime-local" required></label>
+              <label>狙击结束时间<input name="snipingEndTime" type="datetime-local" required></label>
+            </div>
+            <div class="button-row">
+              <button type="submit">保存无名战</button>
+              <button class="ghost-button" id="resetBattleButton" type="button">新建</button>
+              <a class="secondary-link compact" href="/jacketcollection.html">封面收集</a>
+            </div>
+            <p class="message" id="battleMessage"></p>
+          </form>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading action-heading">
+            <div><p class="eyebrow">Battle List</p><h2>无名战列表</h2></div>
+            <button type="button" id="openBattleModalButton">创建无名战</button>
+          </div>
+          <div class="scroll-box tall"><div class="submission-list compact-list" id="adminBattleList"></div></div>
+        </div>
+      </section>
+
+      <section class="dashboard-grid hidden" id="adminGroupTools">
+        <div class="panel">
+          <div class="panel-heading"><p class="eyebrow">Groups</p><h2>谱师组</h2></div>
+                    <form id="mapperGroupForm">
+            <input type="hidden" name="id">
+            <label>谱师组名称<input name="name" required></label>
+            <div class="button-row">
+              <button type="submit">保存谱师组</button>
+              <button class="ghost-button" id="resetMapperGroupButton" type="button">新建</button>
+            </div>
+            <p class="message" id="mapperGroupMessage"></p>
+          </form>
+        </div>
+        <div class="panel">
+          <div class="panel-heading"><p class="eyebrow">Group List</p><h2>谱师组列表</h2></div>
+          <div class="scroll-box"><div class="submission-list compact-list" id="adminMapperGroupList"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading"><p class="eyebrow">Members</p><h2>谱师组成员管理</h2></div>
+          <div class="form-row">
+            <label>谱师组<select id="adminGroupSelect"></select></label>
+            <label>用户<select id="adminGroupUserSelect"></select></label>
+          </div>
+          <div class="button-row">
+            <button id="addUserToGroupButton" type="button">加入谱师组</button>
+          </div>
+          <p class="message" id="adminGroupMemberMessage"></p>
+          <div class="scroll-box"><div class="submission-list compact-list" id="adminGroupMemberList"></div></div>
+        </div>
+      </section>      <section class="panel hidden" id="adminReviewPanel">
+        <div class="panel-heading action-heading">
+          <div><p class="eyebrow">Review</p><h2>待审核谱面</h2></div>
+          <div class="button-row no-margin">
+            <button id="approveAllButton" type="button">全部通过</button>
+            <button class="danger-button" id="clearExpiredReviewButton" type="button">一键清除过期内容</button>
+          </div>
+        </div>
+        <p class="message" id="reviewMessage"></p>
+        <div class="scroll-box tall"><div class="submission-list" id="adminReviewSubmissionList"></div></div>
+      </section>
+      <section class="panel hidden" id="adminSubmissionPanel">
+        <div class="panel-heading action-heading">
+          <div><p class="eyebrow">All Charts</p><h2>全部提交谱面</h2></div>
+          <div class="button-row no-margin">
+            <select class="compact-select" id="adminBattleFilter"><option value="">全部无名战</option></select>
+            <button id="downloadApprovedButton" type="button">一键下载所有参赛谱面</button>
+          </div>
+        </div>
+        <div class="scroll-box tall"><div class="submission-list" id="adminSubmissionList"></div></div>
+      </section>
+      <section class="panel hidden" id="adminTreasureTools">
+        <details class="collapse-panel">
+          <summary>
+            <span><span class="eyebrow">Treasure</span><strong>每日宝箱掉落</strong></span>
+            <span class="summary-hint">展开配置</span>
+          </summary>
+          <form id="treasureDropForm" enctype="multipart/form-data">
+            <input type="hidden" name="id">
+            <label>掉落名称<input name="name" required></label>
+            <label>掉落概率权重<input name="probability" type="number" min="0" step="0.01" required></label>
+            <label>掉落图片<input name="image" type="file" accept="image/*"></label>
+            <div class="button-row">
+              <button type="submit">保存掉落</button>
+              <button class="ghost-button" id="resetTreasureDropButton" type="button">新建</button>
+            </div>
+            <p class="message" id="treasureDropMessage"></p>
+          </form>
+          <div class="scroll-box"><div class="submission-list compact-list" id="adminTreasureDropList"></div></div>
+        </details>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

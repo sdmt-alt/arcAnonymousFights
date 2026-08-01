@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>谱师资料 - Arcaea Anonymous Battles</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Arcaea Anonymous Battles</a>
+      <nav>
+        <a href="/">主页</a>
+                <a href="/battlelist.html">无名战列表</a>
+<a href="/submit.html">提交谱面</a>
+        <a href="/profile.html">个人资料</a>
+        <a class="admin-nav hidden" href="/admin.html">管理员后台</a>
+      </nav>
+      <button class="account-chip" id="accountChip" type="button">
+        <img id="accountAvatar" src="/assets/avatar-placeholder.svg" alt="当前账户头像">
+        <span id="accountName">未登录</span>
+      </button>
+    </header>
+
+    <main class="page-stack">
+      <section class="profile-head">
+        <img id="publicAvatar" src="/assets/avatar-placeholder.svg" alt="谱师头像">
+        <div>
+          <p class="eyebrow">Mapper</p>
+          <h1 id="publicChartName">谱师资料</h1>
+          <p id="publicBio">正在加载资料...</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>公开信息</h2>
+        <div class="detail-list" id="publicProfileInfo"></div>
+      </section>
+
+      <section class="panel hidden" id="publicHostedBattlePanel">
+        <div class="panel-heading">
+          <p class="eyebrow">Hosted Battles</p>
+          <h2>主催无名战</h2>
+        </div>
+        <div class="battle-directory" id="publicHostedBattleList"></div>
+      </section>
+
+      <section class="panel hidden" id="publicSubmissionPanel">
+        <div class="panel-heading">
+          <p class="eyebrow">Charts</p>
+          <h2>投稿谱面</h2>
+        </div>
+        <div class="submission-list" id="publicSubmissionList"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

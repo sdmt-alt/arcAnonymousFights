@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-label="battle banner placeholder">
+  <rect width="1200" height="420" fill="#143643"/>
+  <path d="M0 310 C220 260 320 360 520 310 S860 230 1200 300 V420 H0 Z" fill="#1f7a8c" opacity=".55"/>
+  <path d="M0 120 C180 80 340 130 520 100 S860 20 1200 96 V0 H0 Z" fill="#f4b942" opacity=".38"/>
+  <circle cx="945" cy="126" r="78" fill="#f6f8fb" opacity=".18"/>
+  <text x="72" y="230" fill="#fff" font-family="Arial, sans-serif" font-size="52" font-weight="700">Arcaea Anonymous Battles</text>
+</svg>

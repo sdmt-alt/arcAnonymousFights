@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>主催后台 - Arcaea Anonymous Battles</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Arcaea Anonymous Battles</a>
+      <nav>
+        <a href="/">主页</a>
+        <a href="/battlelist.html">无名战列表</a>
+        <a href="/submit.html">提交谱面</a>
+        <a href="/profile.html">个人资料</a>
+        <a class="admin-nav hidden" href="/admin.html">管理员后台</a>
+      </nav>
+      <button class="account-chip" id="accountChip" type="button">
+        <img id="accountAvatar" src="/assets/avatar-placeholder.svg" alt="当前账户头像">
+        <span id="accountName">未登录</span>
+      </button>
+    </header>
+
+    <main class="page-stack">
+      <section class="battle-hero host-hero" id="hostHero">
+        <div>
+          <p class="eyebrow">Host Dashboard</p>
+          <h1 id="hostBattleTitle">主催后台</h1>
+          <p id="hostBattleDescription"></p>
+        </div>
+        <div class="host-hero-actions">
+          <a class="primary-link compact" id="hostBattleLink" href="/battlelist.html">返回无名战</a>
+        </div>
+      </section>
+      <p class="message" id="hostPageMessage"></p>
+
+      <details class="panel collapse-panel" id="hostSettingsPanel">
+        <summary>
+          <span><span class="eyebrow">Settings</span><strong>无名战设置</strong></span>
+          <span class="summary-hint">展开修改</span>
+        </summary>
+        <form class="host-limit-form" id="hostLimitForm">
+          <label>简介<textarea name="description" rows="3"></textarea></label>
+          <label>Banner 图片<input name="banner" type="file" accept="image/*"></label>
+          <div class="form-row">
+            <label>写谱开始时间<input name="writingStartTime" type="datetime-local" required></label>
+            <label>写谱结束时间<input name="writingEndTime" type="datetime-local" required></label>
+          </div>
+          <div class="form-row">
+            <label>整理开始时间<input name="packingStartTime" type="datetime-local" required></label>
+            <label>整理结束时间<input name="packingEndTime" type="datetime-local" required></label>
+          </div>
+          <div class="form-row">
+            <label>狙击开始时间<input name="snipingStartTime" type="datetime-local" required></label>
+            <label>狙击结束时间<input name="snipingEndTime" type="datetime-local" required></label>
+          </div>
+          <div class="form-row">
+            <label>个人上限<input name="soloLimit" type="number" min="0" placeholder="无限制"></label>
+            <label>合作上限<input name="collabLimit" type="number" min="0" placeholder="无限制"></label>
+            <label>Bonus 上限<input name="bonusLimit" type="number" min="0" placeholder="无限制"></label>
+          </div>
+          <fieldset>
+            <legend>Bonus排除检查</legend>
+            <label class="checkbox-row"><input name="durationEnabled" type="checkbox">启用曲目时长限制检查</label>
+            <div class="form-row">
+              <label>最短时长（秒）<input name="durationMin" type="number" min="0" step="0.1" placeholder="不限"></label>
+              <label>最长时长（秒）<input name="durationMax" type="number" min="0" step="0.1" placeholder="不限"></label>
+            </div>
+            <label class="checkbox-row"><input name="difficultyEnabled" type="checkbox">启用难度范围限制检查</label>
+            <div class="form-row">
+              <label>难度下限<input name="difficultyMin" placeholder="9"></label>
+              <label>难度上限<input name="difficultyMax" placeholder="11+"></label>
+            </div>
+            <label class="checkbox-row"><input name="affTypeCheck" type="checkbox">AFF语句类型检查</label>
+          </fieldset>
+          <fieldset>
+            <legend>AFF语句设置</legend>
+            <label class="checkbox-row"><input name="affAllowGreenSnake" type="checkbox">启用绿蛇</label>
+            <label class="checkbox-row"><input name="affAllowGraySnake" type="checkbox">启用灰蛇</label>
+            <label class="checkbox-row"><input name="affAllowSpecialHitsound" type="checkbox">启用特殊天键</label>
+            <label class="checkbox-row"><input name="affAllowDesignantRedLine" type="checkbox">启用Designant红线</label>
+            <label class="checkbox-row"><input name="affAllowSmoothness" type="checkbox">启用平滑度</label>
+            <label class="checkbox-row"><input name="affAllowFloatTapHold" type="checkbox">启用浮点Tap/Hold</label>
+            <label class="checkbox-row"><input name="affAllowSizeKey" type="checkbox">启用大小键</label>
+            <label class="checkbox-row"><input name="affAllowCamera" type="checkbox">启用Camera</label>
+            <label class="checkbox-row"><input name="affAllowTrackHideShow" type="checkbox">启用trackhide/trackshow</label>
+            <label class="checkbox-row"><input name="affAllowTrackDisplay" type="checkbox">启用trackdisplay</label>
+            <label class="checkbox-row"><input name="affAllowArcahvEffects" type="checkbox">启用Arcahv相关scenecontrol效果</label>
+            <label class="checkbox-row"><input name="affAllowHideGroup" type="checkbox">启用hidegroup</label>
+            <label class="checkbox-row"><input name="affAllowSixK" type="checkbox">启用6k</label>
+            <label class="checkbox-row"><input name="affAllowNoInput" type="checkbox">启用noinput</label>
+            <label class="checkbox-row"><input name="affAllowAngle" type="checkbox">启用angle</label>
+            <label class="checkbox-row"><input name="affAllowFadingHolds" type="checkbox">启用fadingholds</label>
+          </fieldset>
+          <fieldset>
+            <legend>可选自动检查</legend>
+            <label class="checkbox-row"><input name="noEternal" type="checkbox">不启用 Eternal 难度</label>
+            <label class="checkbox-row"><input name="aafAccNormalize" type="checkbox">AAF / ACC标准化检查</label>
+          </fieldset>
+          <fieldset>
+            <legend>参赛分组</legend>
+            <div class="radio-row">
+              <label><input type="radio" name="divisionMode" value="standard" checked>标准分组</label>
+              <label><input type="radio" name="divisionMode" value="custom">自定义分组</label>
+            </div>
+            <input type="hidden" name="customDivisions" id="hostCustomDivisions">
+            <div class="custom-division-editor hidden" id="hostCustomDivisionEditor"></div>
+            <button class="ghost-button compact hidden" id="hostAddCustomDivisionButton" type="button">添加分组</button>
+          </fieldset>
+          <label>规则文档<input name="rules" type="file" accept=".pdf,application/pdf"></label>
+          <div class="button-row">
+            <button type="submit">保存无名战设置</button>
+          </div>
+          <p class="message" id="hostLimitMessage"></p>
+        </form>
+      </details>
+
+      <section class="panel" id="hostReviewPanel">
+        <div class="panel-heading action-heading">
+          <div><p class="eyebrow">Review</p><h2>待审核谱面</h2></div>
+        </div>
+        <div class="scroll-box tall"><div class="submission-list" id="hostReviewSubmissionList"></div></div>
+      </section>
+
+      <section class="panel" id="hostSubmissionPanel">
+        <div class="panel-heading action-heading">
+          <div><p class="eyebrow">All Charts</p><h2>全部提交谱面</h2></div>
+          <button type="button" id="hostDownloadArchiveButton">打包下载谱面</button>
+        </div>
+        <div class="scroll-box tall"><div class="submission-list" id="hostSubmissionList"></div></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

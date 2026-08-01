@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="drop c">
+  <rect width="320" height="320" rx="28" fill="#f8f5ff"/>
+  <path d="M160 48l84 72-32 108H108L76 120z" fill="#9b7ede"/>
+  <path d="M118 128h84M132 168h56" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
+  <text x="160" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#4b367c">Drop C</text>
+</svg>

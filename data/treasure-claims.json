@@ -1,0 +1,34 @@
+[
+  {
+    "id": "943acc84-7150-4927-86d5-03c0dea7e99b",
+    "userId": "6cd0d21e-1298-45c7-81eb-b569edc7ab9f",
+    "username": "1",
+    "dayKey": "2026-07-29",
+    "dropId": "7301b61f-e3e5-461b-afd6-c90f1b0df063",
+    "drop": {
+      "id": "7301b61f-e3e5-461b-afd6-c90f1b0df063",
+      "name": "涂蜡的斑驳切制铜台阶",
+      "probability": 10,
+      "imageUrl": "/uploads/1785263228030-e80695fb-5c61-4720-a58c-06b3d1f96138-150px-Exposed_Cut_Copper_Slab_JE1_BE1.png",
+      "createdAt": "2026-07-28T18:27:08.030Z",
+      "updatedAt": "2026-07-28T18:27:08.030Z"
+    },
+    "createdAt": "2026-07-28T18:29:04.835Z"
+  },
+  {
+    "id": "0a301b29-9bf6-4757-97be-c62421ff6dbc",
+    "userId": "459967c9-d490-48fd-a5b8-5179befd7239",
+    "username": "admin",
+    "dayKey": "2026-07-29",
+    "dropId": "7301b61f-e3e5-461b-afd6-c90f1b0df063",
+    "drop": {
+      "id": "7301b61f-e3e5-461b-afd6-c90f1b0df063",
+      "name": "涂蜡的斑驳切制铜台阶",
+      "probability": 10,
+      "imageUrl": "/uploads/1785263228030-e80695fb-5c61-4720-a58c-06b3d1f96138-150px-Exposed_Cut_Copper_Slab_JE1_BE1.png",
+      "createdAt": "2026-07-28T18:27:08.030Z",
+      "updatedAt": "2026-07-28T18:27:08.030Z"
+    },
+    "createdAt": "2026-07-28T18:42:11.769Z"
+  }
+]

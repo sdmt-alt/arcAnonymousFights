@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="competition dashboard">
+  <defs>
+    <linearGradient id="a" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#143643"/>
+      <stop offset="0.55" stop-color="#176b87"/>
+      <stop offset="1" stop-color="#f3b23c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#a)"/>
+  <g fill="none" stroke="#ffffff" stroke-opacity=".18" stroke-width="3">
+    <path d="M140 210h1320M140 450h1320M140 690h1320"/>
+    <path d="M320 90v720M640 90v720M960 90v720M1280 90v720"/>
+  </g>
+  <g fill="#fff" fill-opacity=".82">
+    <rect x="210" y="180" width="320" height="90" rx="8"/>
+    <rect x="210" y="310" width="520" height="28" rx="8"/>
+    <rect x="210" y="362" width="430" height="28" rx="8"/>
+    <rect x="210" y="414" width="300" height="28" rx="8"/>
+  </g>
+  <g fill="#102733" fill-opacity=".72">
+    <rect x="860" y="190" width="430" height="420" rx="10"/>
+    <rect x="910" y="250" width="330" height="34" rx="8" fill="#f3b23c" fill-opacity=".95"/>
+    <rect x="910" y="324" width="260" height="26" rx="8" fill="#fff"/>
+    <rect x="910" y="386" width="310" height="26" rx="8" fill="#fff"/>
+    <rect x="910" y="448" width="220" height="26" rx="8" fill="#fff"/>
+    <rect x="910" y="520" width="160" height="46" rx="8" fill="#176b87"/>
+  </g>
+</svg>

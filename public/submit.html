@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>提交谱面 - Arcaea Anonymous Battles</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Arcaea Anonymous Battles</a>
+      <nav>
+        <a href="/">主页</a>
+                <a href="/battlelist.html">无名战列表</a>
+<a href="/submit.html">提交谱面</a>
+        <a href="/profile.html">个人资料</a>
+        <a class="admin-nav hidden" href="/admin.html">管理员后台</a>
+      </nav>
+      <button class="account-chip" id="accountChip" type="button">
+        <img id="accountAvatar" src="/assets/avatar-placeholder.svg" alt="当前账户头像">
+        <span id="accountName">未登录</span>
+      </button>
+    </header>
+
+    <main class="submit-layout">
+      <section class="submit-intro">
+        <p class="eyebrow">Submit Chart</p>
+        <h1>提交谱面</h1>
+        <p>选择正在进行中的无名战，填写组别与 songid，上传 zip 谱面文件。合作作品会先等待合作对象确认。</p>
+      </section>
+
+      <section class="panel submit-panel">
+        <div class="panel-heading">
+          <p class="eyebrow">Workflow</p>
+          <h2>提交流程</h2>
+        </div>
+        <div class="step-grid submit-steps">
+          <article><strong>1</strong><span>选择正在进行的无名战</span></article>
+          <article><strong>2</strong><span>填写组别、songid 与合作对象</span></article>
+          <article><strong>3</strong><span>上传 zip 谱面文件并等待自动检查</span></article>
+        </div>
+
+        <div class="login-required hidden" id="loginRequired">
+          <h2>需要登录</h2>
+          <p>请登录后提交谱面。</p>
+          <button class="primary-link compact" id="openLoginButton" type="button">去登录</button>
+        </div>
+
+        <div class="login-required hidden" id="noBattleNotice">
+          <h2>当前无任何可以进行谱面提交的无名战</h2>
+          <p>请等待新的无名战开启。</p>
+          <a class="primary-link compact" href="/">返回主页</a>
+        </div>
+
+        <form id="submissionForm" class="submission-form hidden">
+          <fieldset>
+            <legend>参赛组别</legend>
+            <div class="radio-row">
+              <label><input type="radio" name="division" value="solo" checked>个人</label>
+              <label><input type="radio" name="division" value="collab">合作</label>
+              <label><input type="radio" name="division" value="bonus">Bonus</label>
+            </div>
+            <label class="checkbox-row hidden" id="bonusChartField"><input name="bonusChart" type="checkbox">Bonus谱面</label>
+          </fieldset>
+
+          <div class="form-row">
+            <label>
+              欲参加的无名战
+              <select name="battleId" id="battleSelect" required></select>
+            </label>
+            <label>
+              songid
+              <input name="songId" pattern="[a-z0-9_]+" placeholder="lowercase_123" required>
+            </label>
+          </div>
+          <div class="battle-limit-note" id="submitBattleLimitInfo"></div>
+
+          <label class="hidden" id="collaboratorField">
+            合作对象
+            <select id="collaboratorSelect"></select>
+          </label>
+
+          <div class="hidden" id="bonusCollaboratorField">
+            <label>
+              合作对象
+              <select id="bonusCollaboratorSelect"></select>
+            </label>
+            <button class="ghost-button compact" id="addBonusCollaboratorButton" type="button">加入合作对象</button>
+            <div class="selected-list" id="bonusCollaboratorList"></div>
+          </div>
+
+          <label class="file-field">
+            <span>谱面文件（zip）</span>
+            <input name="chartFile" type="file" accept=".zip,application/zip" required>
+          </label>
+
+          <label>
+            备注
+            <textarea name="notes" rows="3" placeholder="可填写补充说明"></textarea>
+          </label>
+
+          <button type="submit">提交谱面</button>
+          <p class="message" id="submitMessage" role="status"></p>
+        </form>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

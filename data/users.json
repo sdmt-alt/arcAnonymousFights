@@ -1,0 +1,15 @@
+[
+  {
+    "id": "459967c9-d490-48fd-a5b8-5179befd7239",
+    "username": "admin",
+    "chartName": "管理员",
+    "role": "admin",
+    "avatarFileName": "",
+    "bilibili": "",
+    "bio": "",
+    "salt": "81b406fca0a4d5609598ac002f2fb1f7",
+    "passwordHash": "5fd1201895986973118e4feadbad5d9b9ecbcbe216944172697593070f1034be",
+    "createdAt": "2026-07-28T11:26:06.558Z",
+    "groupIds": []
+  }
+]

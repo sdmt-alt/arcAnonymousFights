@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="drop b">
+  <rect width="320" height="320" rx="28" fill="#fff9ed"/>
+  <path d="M160 54l28 70 76 6-58 50 18 74-64-40-64 40 18-74-58-50 76-6z" fill="#f1b844"/>
+  <text x="160" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#5c3a00">Drop B</text>
+</svg>

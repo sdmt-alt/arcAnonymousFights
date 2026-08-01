@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>封面收集 - Arcaea Anonymous Battles</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Arcaea Anonymous Battles</a>
+      <nav>
+        <a href="/">主页</a>
+        <a href="/battlelist.html">无名战列表</a>
+        <a href="/submit.html">提交谱面</a>
+        <a href="/profile.html">个人资料</a>
+        <a class="admin-nav hidden" href="/admin.html">管理员后台</a>
+      </nav>
+      <button class="account-chip" id="accountChip" type="button">
+        <img id="accountAvatar" src="/assets/avatar-placeholder.svg" alt="当前账户头像">
+        <span id="accountName">未登录</span>
+      </button>
+    </header>
+
+    <main class="submit-layout">
+      <section class="submit-intro">
+        <p class="eyebrow">Jacket Collection</p>
+        <h1>封面收集</h1>
+        <p>提交用于后续整理替换的透明或普通封面图片资源。</p>
+      </section>
+
+      <section class="panel submit-panel">
+        <form id="jacketCollectionForm" class="submission-form">
+          <label>标题<input name="title" placeholder="可选"></label>
+          <label class="file-field">
+            <span>封面图片</span>
+            <input name="jacket" type="file" accept=".jpg,image/jpeg" required>
+          </label>
+          <label>备注<textarea name="note" rows="3" placeholder="可选"></textarea></label>
+          <button type="submit">提交封面</button>
+          <p class="message" id="jacketCollectionMessage"></p>
+        </form>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

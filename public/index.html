@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Arcaea Anonymous Battles</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Arcaea Anonymous Battles</a>
+      <nav>
+        <a href="/">主页</a>
+                <a href="/battlelist.html">无名战列表</a>
+<a href="/submit.html">提交谱面</a>
+        <a href="/profile.html">个人资料</a>
+        <a class="admin-nav hidden" href="/admin.html">管理员后台</a>
+      </nav>
+      <button class="account-chip" id="accountChip" type="button">
+        <img id="accountAvatar" src="/assets/avatar-placeholder.svg" alt="当前账户头像">
+        <span id="accountName">未登录</span>
+      </button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Anonymous Battle Hub</p>
+          <h1>Arcaea Anonymous Battles</h1>
+          <p>综合性的Arcaea Fanmade无名战平台</p>
+          <div class="hero-actions">
+            <a class="primary-link" href="/submit.html">提交谱面</a>
+            <a class="secondary-link" href="#mappers">查看谱师</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="home-sections">
+        <div class="panel">
+          <div class="panel-heading split-heading">
+            <div>
+              <p class="eyebrow">Timeline</p>
+              <h2>活动日程</h2>
+            </div>
+            <div class="segmented-control" id="timelineTabs">
+              <button data-timeline="schedule" type="button">日程</button>
+              <button class="active" data-timeline="battle" type="button">无名战</button>
+            </div>
+          </div>
+          <div class="schedule-list" id="scheduleList"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <p class="eyebrow">Collections</p>
+            <h2>往届谱面合集</h2>
+          </div>
+          <div class="collection-strip" id="collectionList"></div>
+        </div>
+
+        <div class="panel" id="mappers">
+          <div class="panel-heading split-heading">
+            <div>
+              <p class="eyebrow">Mappers</p>
+              <h2>全体谱师列表</h2>
+            </div>
+            <label class="inline-filter-label">谱师组
+              <select class="compact-select" id="mapperGroupFilter">
+                <option value="">全体谱师</option>
+              </select>
+            </label>
+          </div>
+          <div class="mapper-grid" id="mapperList"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
