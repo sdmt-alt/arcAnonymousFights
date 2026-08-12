@@ -111,6 +111,7 @@
             <label>简介<textarea name="description" rows="3"></textarea></label>
             <label>Banner 图片<input name="banner" type="file" accept="image/*"></label>
             <label>规则文档<input name="rules" type="file" accept=".pdf,application/pdf"></label>
+            <label>答题卡<input name="answerSheet" type="file"></label>
             <fieldset>
               <legend>主催可修改项锁定</legend>
               <label class="checkbox-row"><input name="lockDescription" type="checkbox">锁定简介</label>
@@ -125,6 +126,7 @@
             <label>开放谱师组<select name="allowedGroupId" id="battleGroupSelect"><option value="">全部谱师</option></select></label>
             <label>主催<select id="battleHostSelect" multiple size="5"></select></label>
             <input type="hidden" name="hostUserIds" id="battleHostIds">
+            <label class="checkbox-row"><input name="provideWebsiteDownload" type="checkbox">提供网站下载</label>
             <fieldset>
               <legend>投稿数量限制</legend>
               <div class="form-row">
@@ -240,7 +242,16 @@
           <p class="message" id="adminGroupMemberMessage"></p>
           <div class="scroll-box"><div class="submission-list compact-list" id="adminGroupMemberList"></div></div>
         </div>
-      </section>      <section class="panel hidden" id="adminReviewPanel">
+      </section>
+      <section class="panel hidden" id="adminBugReportPanel">
+        <div class="panel-heading">
+          <p class="eyebrow">Bug Reports</p>
+          <h2>Bug报告审查</h2>
+        </div>
+        <p class="message" id="bugReportMessage"></p>
+        <div class="scroll-box tall"><div class="submission-list" id="adminBugReportList"></div></div>
+      </section>
+      <section class="panel hidden" id="adminReviewPanel">
         <div class="panel-heading action-heading">
           <div><p class="eyebrow">Review</p><h2>待审核谱面</h2></div>
           <div class="button-row no-margin">
@@ -256,7 +267,7 @@
           <div><p class="eyebrow">All Charts</p><h2>全部提交谱面</h2></div>
           <div class="button-row no-margin">
             <select class="compact-select" id="adminBattleFilter"><option value="">全部无名战</option></select>
-            <button id="downloadApprovedButton" type="button">一键下载所有参赛谱面</button>
+            <button class="download-button" id="downloadApprovedButton" type="button">一键下载所有参赛谱面</button>
           </div>
         </div>
         <div class="scroll-box tall"><div class="submission-list" id="adminSubmissionList"></div></div>

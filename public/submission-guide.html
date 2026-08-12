@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>投稿指南 - Arcaea Anonymous Battles</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">Arcaea Anonymous Battles</a>
+      <nav>
+        <a href="/">主页</a>
+        <a href="/battlelist.html">无名战列表</a>
+        <a href="/submit.html">提交谱面</a>
+        <a href="/about.html">关于本站</a>
+        <a href="/profile.html">个人资料</a>
+        <a class="admin-nav hidden" href="/admin.html">管理员后台</a>
+      </nav>
+      <button class="account-chip" id="accountChip" type="button">
+        <img id="accountAvatar" src="/assets/avatar-placeholder.svg" alt="当前账户头像">
+        <span id="accountName">未登录</span>
+      </button>
+    </header>
+
+    <main class="page-stack">
+      <section class="panel about-panel">
+        <div class="panel-heading">
+          <p class="eyebrow">Guide</p>
+          <h1>投稿指南</h1>
+        </div>
+        <p>这里会整理投稿谱面时需要注意的自动检查规则，以及遇到问题时可以参考的处理方式。</p>
+      </section>
+
+      <section class="panel about-panel guide-section">
+        <div class="panel-heading">
+          <p class="eyebrow">Auto Check</p>
+          <h2>什么是自动检查</h2>
+        </div>
+        <div class="guide-content">
+          <p>自动检查是本站为了方便对无名战投稿谱面的统一处理以及无名战规则检查添加的功能，在谱师投稿时自动检查谱面压缩包是否合规，并对检查不通过的谱面压缩包进行打回。</p>
+        </div>
+      </section>
+
+      <section class="panel about-panel guide-section">
+        <div class="panel-heading">
+          <p class="eyebrow">Check Items</p>
+          <h2>有哪些自动检查</h2>
+        </div>
+        <div class="guide-content">
+          <p>自动检查分为标准自动检查、可选自动检查以及Bonus排除检查。</p>
+
+          <section class="guide-subsection">
+            <h3>标准自动检查</h3>
+            <p>标准自动检查对所有投稿谱面生效，在无名战详情页面不显示。</p>
+            <p>标准自动检查主要检查谱面压缩包的基本正确性，主要检查内容包括：</p>
+            <ul>
+              <li>songlist文件的存在性与语法正确性</li>
+              <li>音频、曲绘文件是否存在与格式是否正确</li>
+              <li>无名战投稿数限制</li>
+            </ul>
+          </section>
+
+          <section class="guide-subsection">
+            <h3 class="optional-check-guide">可选自动检查</h3>
+            <p>可选自动检查在启用后对所有投稿谱面生效，在无名战详情页面使用蓝色字体显示。</p>
+            <p>可选自动检查内容包括：</p>
+            <ul>
+              <li>
+                <strong>不启用Eternal难度</strong>
+                <span>启用后，代表当前无名战不接受Eternal难度的投稿，包含Eternal难度的投稿将被打回。</span>
+              </li>
+              <li>
+                <strong>AAF / ACC 标准化检查</strong>
+              </li>
+            </ul>
+          </section>
+
+          <section class="guide-subsection">
+            <h3 class="bonus-check-guide">Bonus排除检查</h3>
+            <p>Bonus排除检查在启用后对所有非Bonus投稿谱面生效，在无名战详情页面使用橙色字体显示。</p>
+            <p>Bonus排除检查主要检查正常参赛谱面是否符合无名战限制，主要检查内容包括：</p>
+            <ul>
+              <li>
+                <strong>曲目时长限制检查</strong>
+                <span>启用后，代表当前无名战的正常参赛谱面的曲目时长需要在设置范围内，正常参赛谱面压缩包中base.ogg音频长度与时长限制差距超过1s的投稿将被打回。</span>
+              </li>
+              <li>
+                <strong>难度范围限制检查</strong>
+                <span>启用后，代表当前无名战的正常参赛谱面的难度需要在设置的范围内，正常参赛谱面难度不在设置区间中的投稿将被打回。</span>
+              </li>
+              <li>
+                <strong>AAF语句类型检查</strong>
+                <span>启用后，代表当前无名战对正常参赛谱面使用的AFF语句存在限制，正常参赛谱面.aff文件中存在设置的不允许的语句的投稿将被打回，你可以在无名战详情页面下载规则文档来查看赛事对于使用AFF语句的限制。</span>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </section>
+
+      <section class="panel about-panel guide-section">
+        <div class="panel-heading">
+          <p class="eyebrow">Troubleshooting</p>
+          <h2>自动检查不通过怎么办</h2>
+        </div>
+        <div class="guide-content">
+          <p>你可以根据投稿时给出的提示初步排查问题所在，大多数提示均直接给出了问题所在。</p>
+          <p>下面是部分提示以及其问题原因：</p>
+
+          <section class="guide-subsection">
+            <h3>songlist解析失败</h3>
+            <p>这说明你的songlist文件存在语法错误导致json解析失败，请检查songlist文件中是否存在未闭合的括号、引号、多余的逗号或者中文符号等等，你可以在 <a class="inline-doc-link" href="https://jsontool.cn/json-parse" target="_blank" rel="noopener noreferrer">https://jsontool.cn/json-parse</a> 寻找songlist文件的语法问题并尝试修复。</p>
+          </section>
+
+          <section class="guide-subsection">
+            <h3>提交过songid为'xxxxxx'的谱面</h3>
+            <p>这说明你已经在当前无名战中投稿过一个songid相同的投稿，如果你需要对谱面进行修改，你可以在个人资料页面查看“我投稿的谱面”一栏选择直接修改投稿或撤回后重新投稿。如果你需要投稿一个songid相同但内容不同的投稿，请自行对songid进行修改。</p>
+          </section>
+
+          <section class="guide-subsection">
+            <h3>xxx的格式不为xxx</h3>
+            <p>这说明你的谱面压缩包中有文件的格式错误，请不要使用直接修改文件后缀名的方式来对文件进行“格式转换”。你可以使用格式工厂、paint.net等免费软件或者搜索一些在线格式转换网站进行格式转换。</p>
+          </section>
+
+          <section class="guide-subsection">
+            <h3>SONGLIST: 不存在有效参赛难度</h3>
+            <p>这说明你提交的谱面songlist中，所有出现的Future、Beyond、Eternal的难度均为？（即rating为-1），请为你的参赛谱面设置一个合理的难度。</p>
+          </section>
+
+          <section class="guide-subsection">
+            <h3>SONGLIST: 存在难度没有对应谱面文件</h3>
+            <p>这说明你提交的谱面songlist中，有难度的rating不为-1但是谱面压缩包中没有对应的.aff文件，请检查是否存在标为Beyond难度谱面但是却提交了2.aff这类情况。</p>
+          </section>
+
+          <p>如果你认为你的谱面压缩包没有问题，是自动检查系统存在漏洞从而误判，请在投稿界面进行Bug报告。注意，请在报告Bug前仔细检查确认投稿的谱面压缩包，切勿滥用Bug报告功能，否则你可能会被禁用该功能。</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

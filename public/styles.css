@@ -56,6 +56,10 @@ nav {
   font-weight: 700;
 }
 
+body:not(.session-authenticated) .site-header nav a[href="/profile.html"] {
+  display: none;
+}
+
 .account-chip {
   min-width: 0;
   display: inline-flex;
@@ -118,6 +122,165 @@ nav {
 
 .account-stat-row[data-href]:hover {
   color: var(--accent-strong);
+}
+
+.auth-notice {
+  margin: -2px 0 2px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.auth-notice a {
+  color: var(--accent-strong);
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.minor-link-row {
+  margin: 14px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.minor-link-row a,
+.bug-report-link {
+  color: var(--accent-strong);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.bug-report-link {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.bug-report-link.disabled-link {
+  color: var(--muted);
+  cursor: default;
+}
+
+.check-result-intro {
+  margin: 0 0 12px;
+  color: var(--ink);
+  line-height: 1.65;
+  font-weight: 800;
+}
+
+.about-panel {
+  line-height: 1.85;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.guide-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 220px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.guide-card h2,
+.guide-card p {
+  margin: 0;
+}
+
+.guide-card p {
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.guide-content {
+  display: grid;
+  gap: 12px;
+  min-height: 140px;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.guide-content img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.guide-section {
+  min-height: 220px;
+}
+
+.guide-subsection {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.guide-subsection h3,
+.guide-subsection p,
+.guide-subsection ul {
+  margin: 0;
+}
+
+.guide-subsection h3 {
+  color: var(--ink);
+  font-size: 1.08rem;
+}
+
+.guide-subsection ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 1.2rem;
+}
+
+.guide-subsection li {
+  line-height: 1.75;
+}
+
+.guide-subsection li strong {
+  display: block;
+  color: var(--ink);
+}
+
+.inline-doc-link {
+  color: var(--accent-strong);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.optional-check-guide {
+  color: #8fd3ff !important;
+}
+
+.bonus-check-guide {
+  color: #f4a340 !important;
+}
+
+.guide-placeholder {
+  min-height: 120px;
+}
+
+.notice-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+.notice-list li::marker {
+  color: var(--accent);
 }
 
 main {
@@ -476,6 +639,27 @@ legend {
   justify-content: space-between;
   gap: 16px;
   align-items: center;
+}
+
+.action-heading > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.action-heading > div:first-child h2 {
+  white-space: nowrap;
+}
+
+.action-heading > .button-row,
+.action-heading > .admin-download-column {
+  flex: 0 0 auto;
+}
+
+.admin-submission-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -2px 0 8px;
+  transform: translateY(-22px);
 }
 
 .split-heading {
@@ -995,7 +1179,8 @@ legend {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.42);
 }
 
-.battle-hero #downloadRulesButton {
+.battle-hero #downloadRulesButton,
+.battle-hero #downloadAnswerSheetButton {
   text-shadow: none;
 }
 
@@ -1013,6 +1198,23 @@ legend {
 
 .battle-hero-actions button {
   width: fit-content;
+}
+
+.battle-hero-actions button:disabled {
+  color: #667085;
+  background: #d9dee8;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.battle-submission-filter {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 14px;
+}
+
+.battle-submission-filter select {
+  width: min(180px, 44vw);
 }
 
 .battle-hosts-badge {
@@ -1507,6 +1709,112 @@ legend {
   margin-top: 10px;
 }
 
+.host-download-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.download-archive-column {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.archive-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.download-options {
+  width: 100%;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.admin-download-column .download-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-download-column .download-options .checkbox-row {
+  margin: 0;
+}
+
+.admin-download-column .download-options .checkbox-row.compact-checkbox {
+  width: auto;
+  white-space: nowrap;
+}
+
+.admin-download-column {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  margin-left: auto;
+  width: min(420px, 100%);
+}
+
+.admin-download-column .compact-select {
+  width: min(180px, 42vw);
+}
+
+.participant-download-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+#adminSubmissionPanel .button-row.no-margin {
+  width: 100%;
+  align-items: flex-start;
+}
+
+#adminSubmissionPanel #adminBattleFilter {
+  width: min(180px, 42vw);
+}
+
+#adminSubmissionPanel #downloadApprovedButton {
+  margin-left: 0;
+}
+
+.participant-info-action {
+  display: grid;
+  justify-items: stretch;
+  gap: 6px;
+}
+
+.compact-checkbox {
+  width: auto;
+  min-height: 24px;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.download-button {
+  color: #143643 !important;
+  background: #8fd3ff !important;
+}
+
+.download-button:hover:not(:disabled) {
+  background: #78c7f5 !important;
+}
+
+.download-button:disabled {
+  color: #667085 !important;
+  background: #d9dee8 !important;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 .pill-button {
   min-height: 32px;
   padding: 0 10px;
@@ -1550,6 +1858,7 @@ legend {
   .battle-card,
   .battle-submission-item,
   .battle-phase-times,
+  .guide-grid,
   .schedule-item,
   .step-grid {
     grid-template-columns: 1fr;

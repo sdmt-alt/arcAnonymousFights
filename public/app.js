@@ -11,9 +11,12 @@ let currentAdminBattleFilter = "";
 let adminUsers = [];
 let adminBattles = [];
 let currentBattleId = "";
+let battleSubmissionDivisionFilter = "";
+let currentBattleDetailPayload = null;
 let treasureEffectToken = 0;
 let timelineRefreshTimer = 0;
 let battleCountdownTimer = 0;
+let lastAutoCheckErrors = [];
 
 const AFF_SYNTAX_FIELD_MAP = {
   affAllowGreenSnake: "allowGreenSnake",
@@ -35,6 +38,7 @@ const AFF_SYNTAX_FIELD_MAP = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  ensureAboutNavLink();
   ensureAuthModal();
   ensureAutoCheckModal();
   setupAccountChip();
@@ -56,6 +60,17 @@ document.addEventListener("DOMContentLoaded", () => {
   setupJacketCollectionPage();
   setupAdminPage();
 });
+
+function ensureAboutNavLink() {
+  document.querySelectorAll(".site-header nav").forEach((nav) => {
+    if (nav.querySelector('a[href="/about.html"]')) return;
+    const link = document.createElement("a");
+    link.href = "/about.html";
+    link.textContent = "关于本站";
+    const profileLink = nav.querySelector('a[href="/profile.html"]');
+    nav.insertBefore(link, profileLink || nav.querySelector(".admin-nav") || null);
+  });
+}
 
 function authHeaders(extra = {}) {
   const token = localStorage.getItem(tokenKey);
@@ -92,7 +107,9 @@ function ensureAutoCheckModal() {
           <h2 id="autoCheckTitle">自动检查结果</h2>
           <button class="ghost-button compact" id="closeAutoCheckModal" type="button">关闭</button>
         </div>
+        <p class="check-result-intro hidden" id="autoCheckIntro"></p>
         <div class="check-result-list" id="autoCheckResultList"></div>
+        <p class="bug-report-link hidden" id="autoCheckBugReportLink" role="button" tabindex="0">当你认为上传的压缩包没有问题时，点击此处报告Bug</p>
       </div>
     </div>
   `);
@@ -100,13 +117,29 @@ function ensureAutoCheckModal() {
   document.querySelector("#autoCheckModal").addEventListener("click", (event) => {
     if (event.target.id === "autoCheckModal") closeAutoCheckModal();
   });
+  document.querySelector("#autoCheckBugReportLink")?.addEventListener("click", reportAutoCheckBug);
+  document.querySelector("#autoCheckBugReportLink")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") reportAutoCheckBug(event);
+  });
 }
 
 function showAutoCheckModal(ok, messages) {
   document.querySelector("#autoCheckTitle").textContent = ok ? "谱面提交成功" : "谱面提交不成功";
+  const intro = document.querySelector("#autoCheckIntro");
+  if (intro) {
+    intro.textContent = ok ? "" : "提交的谱面压缩包存在问题，无法通过自动检测，请根据提示信息进行修改。如有疑问，可以在页面下方点击查看投稿指南。";
+    intro.classList.toggle("hidden", ok);
+  }
   document.querySelector("#autoCheckResultList").innerHTML = messages.map((message) => `
     <div class="check-result-item ${ok ? "success" : "error"}">${escapeHtml(message)}</div>
   `).join("");
+  const bugLink = document.querySelector("#autoCheckBugReportLink");
+  if (bugLink) {
+    bugLink.textContent = "当你认为上传的压缩包没有问题时，点击此处报告Bug";
+    bugLink.classList.toggle("hidden", ok || !document.querySelector("#submissionForm"));
+    bugLink.dataset.confirming = "";
+    bugLink.dataset.sent = "";
+  }
   openModal("#autoCheckModal");
 }
 
@@ -146,6 +179,7 @@ function ensureAuthModal() {
           <label>密码<input name="password" type="password" autocomplete="new-password" minlength="6" required></label>
           <label>谱师名义<input name="chartName" required></label>
           <label>注册验证码<input name="registrationCode" required></label>
+          <p class="auth-notice">请在注册前阅读 <a href="/about.html">关于本站</a> 页面中的内容，继续注册并使用本站代表你已阅读并接收相关内容。</p>
           <button type="submit">创建普通用户账号</button>
         </form>
         <p class="message" id="authMessage" role="status"></p>
@@ -269,8 +303,12 @@ function closeAuthModal() {
 
 function renderSession() {
   const user = getStoredUser();
+  document.body.classList.toggle("session-authenticated", Boolean(user));
   document.querySelectorAll(".admin-nav").forEach((entry) => {
     entry.classList.toggle("hidden", user?.role !== "admin");
+  });
+  document.querySelectorAll('.site-header nav a[href="/profile.html"]').forEach((entry) => {
+    entry.classList.toggle("hidden", !user);
   });
   const avatar = document.querySelector("#accountAvatar");
   const name = document.querySelector("#accountName");
@@ -484,6 +522,7 @@ async function setupBattleDetailPage() {
     document.querySelector("#battlePhase").textContent = battle.phaseLabel;
     document.querySelector("#battleDescription").textContent = battle.description || "暂无简介。";
     document.querySelector("#battleHero").style.backgroundImage = `linear-gradient(90deg, rgba(20,54,67,.88), rgba(20,54,67,.5)), url("${battle.bannerUrl}")`;
+    currentBattleDetailPayload = payload;
     renderBattleHeroTools(battle);
     renderBattlePhaseContent(battle, payload.submissions || [], payload.canDownload);
     setupHostBattlePanel(battle);
@@ -496,6 +535,7 @@ async function setupBattleDetailPage() {
 function renderBattleHeroTools(battle) {
   const limitBox = document.querySelector("#battleHeroLimit");
   const rulesButton = document.querySelector("#downloadRulesButton");
+  const answerSheetButton = document.querySelector("#downloadAnswerSheetButton");
   const hero = document.querySelector("#battleHero");
   if (limitBox) {
     const restriction = battle.allowedGroupNames?.length ? battle.allowedGroupNames.map((name) => `［${escapeHtml(name)}］`).join("，") : "无限制";
@@ -507,6 +547,12 @@ function renderBattleHeroTools(battle) {
   rulesButton.disabled = !battle.canDownloadRules || battle.phase === "upcoming";
   rulesButton.title = battle.phase === "upcoming" ? "无名战尚未开始" : "";
   rulesButton.onclick = () => downloadBattleRules(battle.id);
+  if (answerSheetButton) {
+    answerSheetButton.classList.toggle("hidden", battle.phase !== "sniping");
+    answerSheetButton.disabled = battle.phase === "sniping" && !battle.canDownloadAnswerSheet;
+    answerSheetButton.title = answerSheetButton.disabled ? "无答题卡下载权限" : "";
+    answerSheetButton.onclick = () => downloadBattleAnswerSheet(battle.id);
+  }
   const actions = hero?.querySelector(".battle-hero-actions");
   actions?.querySelector(".battle-hosts-badge")?.remove();
   const visibleHosts = (battle.hosts || []).filter((host) => host.role !== "admin");
@@ -562,13 +608,45 @@ function renderBattlePhaseContent(battle, submissions, canDownload) {
     return;
   }
   statusTitle.textContent = battle.phase === "sniping" ? "当前无名战正在狙击阶段" : "无名战已结束";
-  if (canDownload) {
-    const disabled = Number(battle.finalSubmissionCount || 0) <= 0 ? "disabled title=\"暂无可下载谱面\"" : "";
-    actionBar.innerHTML = `<button type="button" ${disabled} onclick="downloadBattleArchive('${escapeAttr(battle.id)}')">打包下载</button>`;
-  }
-  area.innerHTML = `${countText}${submissions.length
-    ? `<div class="submission-list">${submissions.map((item) => renderBattleSubmission(item, battle, canDownload)).join("")}</div>`
+  const finalCount = Number(battle.finalSubmissionCount || 0);
+  const enabled = canDownload && finalCount > 0;
+  const title = !canDownload ? "当前无名战未开放网站下载" : finalCount <= 0 ? "暂无可下载谱面" : "";
+  actionBar.innerHTML = `<button class="download-button" type="button" ${enabled ? "" : "disabled"} title="${escapeAttr(title)}" onclick="downloadBattleArchive('${escapeAttr(battle.id)}')">打包下载</button>`;
+  const selectedDivision = currentBattleSubmissionDivisionFilter(battle);
+  const filteredSubmissions = selectedDivision
+    ? submissions.filter((item) => item.division === selectedDivision)
+    : submissions;
+  area.innerHTML = `${countText}${renderBattleSubmissionDivisionFilter(battle, selectedDivision)}${filteredSubmissions.length
+    ? `<div class="submission-list">${filteredSubmissions.map((item) => renderBattleSubmission(item, battle, canDownload)).join("")}</div>`
     : `<div class="empty-battle-art"><img src="/assets/empty-battle-placeholder.png" alt="暂无谱面">${battle.phase === "ended" ? "<p>没有谱面</p>" : ""}</div>`}`;
+}
+
+function currentBattleSubmissionDivisionFilter(battle) {
+  const value = battleSubmissionDivisionFilter || "";
+  return battleDivisionOptions(battle).some((division) => division.id === value) ? value : "";
+}
+
+function renderBattleSubmissionDivisionFilter(battle, selectedDivision = "") {
+  const divisions = battleDivisionOptions(battle);
+  if (!divisions.length) return "";
+  return `
+    <div class="battle-submission-filter">
+      <label class="inline-filter-label">参赛组别
+        <select id="battleSubmissionDivisionFilter" onchange="filterBattleSubmissions(this.value)">
+          <option value="">全部</option>
+          ${divisions.map((division) => `<option value="${escapeAttr(division.id)}" ${division.id === selectedDivision ? "selected" : ""}>${escapeHtml(division.name)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+  `;
+}
+
+function filterBattleSubmissions(value) {
+  battleSubmissionDivisionFilter = value || "";
+  const payload = currentBattleDetailPayload;
+  if (!payload?.battle) return;
+  renderBattlePhaseContent(payload.battle, payload.submissions || [], payload.canDownload);
+  setupHostBattlePanel(payload.battle);
 }
 
 function updateBattleCountdown(battle) {
@@ -648,6 +726,7 @@ async function setupHostPage() {
     document.querySelector("#hostHero").style.backgroundImage = `linear-gradient(90deg, rgba(20,54,67,.88), rgba(20,54,67,.5)), url("${battle.bannerUrl}")`;
     document.querySelector("#hostBattleLink")?.setAttribute("href", `/battle.html?id=${encodeURIComponent(battle.id)}`);
     archiveButton?.addEventListener("click", downloadHostBattleArchive);
+    setupHostParticipantInfoControls(battle);
     fillHostLimitForm(battle);
     setupCustomDivisionEditor("host");
     setupHostLimitForm();
@@ -663,6 +742,7 @@ async function setupHostPage() {
 
 function setArchiveButtonState(button, enabled) {
   if (!button) return;
+  button.classList.add("download-button");
   button.disabled = !enabled;
   button.title = enabled ? "" : "暂无可下载谱面";
 }
@@ -696,12 +776,14 @@ function fillHostLimitForm(battle) {
   const locks = battle.settingLocks || {};
   if (form.description) form.description.value = battle.description || "";
   if (form.banner) form.banner.value = "";
+  if (form.answerSheet) form.answerSheet.value = "";
   if (form.writingStartTime) form.writingStartTime.value = toDatetimeLocal(battle.writingStartTime);
   if (form.writingEndTime) form.writingEndTime.value = toDatetimeLocal(battle.writingEndTime);
   if (form.packingStartTime) form.packingStartTime.value = toDatetimeLocal(battle.packingStartTime);
   if (form.packingEndTime) form.packingEndTime.value = toDatetimeLocal(battle.packingEndTime);
   if (form.snipingStartTime) form.snipingStartTime.value = toDatetimeLocal(battle.snipingStartTime);
   if (form.snipingEndTime) form.snipingEndTime.value = toDatetimeLocal(battle.snipingEndTime);
+  if (form.provideWebsiteDownload) form.provideWebsiteDownload.checked = Boolean(battle.provideWebsiteDownload);
   form.soloLimit.value = limits.solo ?? "";
   form.collabLimit.value = limits.collab ?? "";
   form.bonusLimit.value = limits.bonus ?? "";
@@ -778,6 +860,7 @@ function setupHostLimitForm() {
     const data = Object.fromEntries(new FormData(form));
     delete data.rules;
     delete data.banner;
+    delete data.answerSheet;
     try {
       await requestJson(`/api/host/battles/${encodeURIComponent(currentBattleId)}/limits`, {
         method: "PATCH",
@@ -794,9 +877,25 @@ function setupHostLimitForm() {
         });
         form.rules.value = "";
       }
+      if (form.answerSheet?.files?.[0]) {
+        const answerSheetData = new FormData();
+        answerSheetData.append("answerSheet", form.answerSheet.files[0]);
+        await requestJson(`/api/host/battles/${encodeURIComponent(currentBattleId)}/answer-sheet`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: answerSheetData
+        });
+        form.answerSheet.value = "";
+      }
       const settingsData = new FormData();
-      ["description", "writingStartTime", "writingEndTime", "packingStartTime", "packingEndTime", "snipingStartTime", "snipingEndTime"].forEach((name) => {
-        if (form.elements[name]) settingsData.append(name, form.elements[name].disabled && name === "description" ? form.dataset.currentDescription || "" : form.elements[name].value);
+      ["description", "writingStartTime", "writingEndTime", "packingStartTime", "packingEndTime", "snipingStartTime", "snipingEndTime", "provideWebsiteDownload"].forEach((name) => {
+        const field = form.elements[name];
+        if (!field) return;
+        if (field.type === "checkbox") {
+          if (field.checked) settingsData.append(name, "on");
+          return;
+        }
+        settingsData.append(name, field.disabled && name === "description" ? form.dataset.currentDescription || "" : field.value);
       });
       if (form.banner?.files?.[0]) settingsData.append("banner", form.banner.files[0]);
       await requestJson(`/api/host/battles/${encodeURIComponent(currentBattleId)}/settings`, {
@@ -1042,6 +1141,16 @@ async function downloadBattleRules(battleId) {
   await saveBlobResponse(response, "rules.pdf");
 }
 
+async function downloadBattleAnswerSheet(battleId) {
+  const response = await fetch(`/api/battles/${encodeURIComponent(battleId)}/answer-sheet`, { headers: authHeaders() });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: "下载失败" }));
+    showInfoModal("提示", [payload.error || "下载失败"]);
+    return;
+  }
+  await saveBlobResponse(response, "answer-sheet");
+}
+
 async function loadHostSubmissions() {
   const list = document.querySelector("#hostSubmissionList");
   if (!list || !currentBattleId) return;
@@ -1090,7 +1199,147 @@ async function reviewHostSubmission(id, status) {
 async function downloadHostBattleArchive() {
   const button = document.querySelector("#hostDownloadArchiveButton");
   if (button?.disabled) return;
-  await downloadBlob(`/api/host/battles/${encodeURIComponent(currentBattleId)}/download`, "host-battle-charts.zip");
+  const options = readArchiveDownloadOptions("host");
+  await downloadBlob(buildArchiveDownloadUrl(`/api/host/battles/${encodeURIComponent(currentBattleId)}/download`, options), "host-battle-charts.zip");
+}
+
+async function downloadHostBattleRawArchive() {
+  const button = document.querySelector("#hostDownloadRawArchiveButton");
+  if (button?.disabled) return;
+  await downloadBlob(buildArchiveDownloadUrl(`/api/host/battles/${encodeURIComponent(currentBattleId)}/download`, { rawArchive: true }), "host-battle-original-charts.zip");
+}
+
+function setupHostParticipantInfoControls(battle) {
+  const archiveButton = document.querySelector("#hostDownloadArchiveButton");
+  if (!archiveButton || document.querySelector("#hostParticipantInfoButton")) return;
+  const wrapper = document.createElement("div");
+  wrapper.className = "host-download-actions";
+  archiveButton.replaceWith(wrapper);
+  const archiveColumn = document.createElement("div");
+  archiveColumn.className = "download-archive-column";
+  const archiveButtonRow = document.createElement("div");
+  archiveButtonRow.className = "archive-button-row";
+  archiveButtonRow.appendChild(archiveButton);
+  archiveButton.classList.add("download-button");
+  if (battle.optionalChecks?.aafAccNormalize) {
+    const rawButton = document.createElement("button");
+    rawButton.type = "button";
+    rawButton.id = "hostDownloadRawArchiveButton";
+    rawButton.className = "download-button";
+    rawButton.textContent = "打包下载原件";
+    rawButton.disabled = archiveButton.disabled;
+    rawButton.title = archiveButton.title || "";
+    rawButton.addEventListener("click", downloadHostBattleRawArchive);
+    archiveButtonRow.appendChild(rawButton);
+  }
+  archiveColumn.appendChild(archiveButtonRow);
+  const options = document.createElement("div");
+  options.className = "download-options";
+  options.innerHTML = `
+    <label class="checkbox-row compact-checkbox"><input id="hostApplySonglistMerge" type="checkbox">应用songlist合并</label>
+    <label class="checkbox-row compact-checkbox"><input id="hostAutoCropPreview" type="checkbox">自动裁剪preview.ogg</label>
+  `;
+  archiveColumn.appendChild(options);
+  wrapper.appendChild(archiveColumn);
+  const imageGroup = document.createElement("div");
+  imageGroup.className = "participant-info-action";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = "hostParticipantInfoButton";
+  button.textContent = "生成参赛信息图片";
+  const label = document.createElement("label");
+  label.className = "checkbox-row compact-checkbox";
+  label.innerHTML = `<input id="hostParticipantInfoWithJackets" type="checkbox">包含曲绘`;
+  imageGroup.appendChild(button);
+  imageGroup.appendChild(label);
+  const csvButton = document.createElement("button");
+  csvButton.type = "button";
+  csvButton.id = "hostParticipantInfoCsvButton";
+  csvButton.textContent = "生成参赛信息表格";
+  const infoRow = document.createElement("div");
+  infoRow.className = "participant-download-row";
+  infoRow.appendChild(imageGroup);
+  infoRow.appendChild(csvButton);
+  wrapper.appendChild(infoRow);
+  const enabled = ["packing", "sniping"].includes(battle.phase);
+  button.disabled = !enabled;
+  button.title = enabled ? "" : "仅整理阶段与狙击阶段可以生成参赛信息图片";
+  csvButton.disabled = !enabled;
+  csvButton.title = enabled ? "" : "仅整理阶段与狙击阶段可以生成参赛信息表格";
+  button.addEventListener("click", downloadHostParticipantInfoImage);
+  csvButton.addEventListener("click", downloadHostParticipantInfoCsv);
+}
+
+function ensureAdminArchiveOptions() {
+  const button = document.querySelector("#downloadApprovedButton");
+  const filter = document.querySelector("#adminBattleFilter");
+  const panel = document.querySelector("#adminSubmissionPanel");
+  if (!button || !panel) return;
+  let toolbar = document.querySelector("#adminSubmissionToolbar");
+  if (!toolbar) {
+    const row = button.closest(".button-row") || button.parentElement;
+    if (!row) return;
+    toolbar = document.createElement("div");
+    toolbar.id = "adminSubmissionToolbar";
+    toolbar.className = "admin-submission-toolbar";
+    const scrollBox = panel.querySelector(".scroll-box");
+    if (scrollBox) panel.insertBefore(toolbar, scrollBox);
+    else panel.appendChild(toolbar);
+    const column = document.createElement("div");
+    column.className = "admin-download-column";
+    toolbar.appendChild(column);
+    if (filter) column.appendChild(filter);
+    const archiveButtonRow = document.createElement("div");
+    archiveButtonRow.className = "archive-button-row";
+    archiveButtonRow.appendChild(button);
+    const rawButton = document.createElement("button");
+    rawButton.type = "button";
+    rawButton.id = "downloadApprovedRawButton";
+    rawButton.className = "download-button hidden";
+    rawButton.textContent = "打包下载原件";
+    rawButton.addEventListener("click", downloadApprovedRawChartsWithAuth);
+    archiveButtonRow.appendChild(rawButton);
+    column.appendChild(archiveButtonRow);
+    const options = document.createElement("div");
+    options.className = "download-options";
+    options.id = "adminArchiveOptions";
+    options.innerHTML = `
+      <label class="checkbox-row compact-checkbox"><input id="adminApplySonglistMerge" type="checkbox">应用songlist合并</label>
+      <label class="checkbox-row compact-checkbox"><input id="adminAutoCropPreview" type="checkbox">自动裁剪preview.ogg</label>
+    `;
+    column.appendChild(options);
+    row.remove();
+  }
+  updateAdminArchiveButton();
+}
+
+async function downloadHostParticipantInfoImage() {
+  const button = document.querySelector("#hostParticipantInfoButton");
+  if (button?.disabled) return;
+  const includeJackets = document.querySelector("#hostParticipantInfoWithJackets")?.checked ? "1" : "0";
+  await downloadBlob(`/api/host/battles/${encodeURIComponent(currentBattleId)}/participant-info-image?includeJackets=${includeJackets}`, "participant-info.jpg");
+}
+
+async function downloadHostParticipantInfoCsv() {
+  const button = document.querySelector("#hostParticipantInfoCsvButton");
+  if (button?.disabled) return;
+  await downloadBlob(`/api/host/battles/${encodeURIComponent(currentBattleId)}/participant-info-csv`, "participant-info.csv");
+}
+
+function readArchiveDownloadOptions(prefix) {
+  return {
+    applySonglistMerge: Boolean(document.querySelector(`#${prefix}ApplySonglistMerge`)?.checked),
+    autoCropPreview: Boolean(document.querySelector(`#${prefix}AutoCropPreview`)?.checked)
+  };
+}
+
+function buildArchiveDownloadUrl(baseUrl, options = {}) {
+  const params = new URLSearchParams();
+  if (options.applySonglistMerge) params.set("applySonglistMerge", "1");
+  if (options.autoCropPreview) params.set("autoCropPreview", "1");
+  if (options.rawArchive) params.set("rawArchive", "1");
+  const query = params.toString();
+  return query ? `${baseUrl}?${query}` : baseUrl;
 }
 
 async function downloadHostSubmission(event, id) {
@@ -1447,8 +1696,38 @@ async function submitChart(event) {
     showAutoCheckModal(true, [successText]);
     setMessage("#submitMessage", successText, "success");
   } catch (error) {
-    showAutoCheckModal(false, error.autoCheckErrors?.length ? error.autoCheckErrors : [error.message]);
+    lastAutoCheckErrors = error.autoCheckErrors?.length ? error.autoCheckErrors : [error.message];
+    showAutoCheckModal(false, lastAutoCheckErrors);
     setMessage("#submitMessage", error.message, "error");
+  }
+}
+
+async function reportAutoCheckBug(event) {
+  event?.preventDefault?.();
+  const link = document.querySelector("#autoCheckBugReportLink");
+  const form = document.querySelector("#submissionForm");
+  if (!link || !form || link.dataset.sent === "true") return;
+  if (link.dataset.confirming !== "true") {
+    link.dataset.confirming = "true";
+    link.textContent = "再次点击确认报告Bug";
+    return;
+  }
+  const data = new FormData(form);
+  data.append("errors", JSON.stringify(lastAutoCheckErrors || []));
+  link.textContent = "正在提交Bug报告...";
+  link.classList.add("disabled-link");
+  try {
+    await requestJson("/api/bug-reports", {
+      method: "POST",
+      headers: authHeaders(),
+      body: data
+    });
+    link.dataset.sent = "true";
+    link.textContent = "Bug报告成功";
+  } catch (error) {
+    link.dataset.confirming = "";
+    link.classList.remove("disabled-link");
+    link.textContent = error.message || "Bug报告提交失败";
   }
 }
 
@@ -1464,6 +1743,7 @@ async function setupProfilePage() {
   document.querySelector("#mySubmissionList")?.closest(".panel")?.classList.toggle("hidden", user?.role === "admin");
   await loadMapperGroups();
   if (user?.role !== "admin") await loadMySubmissions();
+  if (user?.role !== "admin") await loadMyBugReports();
   await loadMyChartRequests();
   await loadCollaborationRequests();
   setupProfileEditModal();
@@ -1663,6 +1943,16 @@ async function loadCollaborationRequests() {
   }
 }
 
+async function loadMyBugReports() {
+  const panel = document.querySelector("#profileBugReportPanel");
+  const list = document.querySelector("#profileBugReportList");
+  if (!panel || !list) return;
+  const payload = await requestJson("/api/my/bug-reports", { headers: authHeaders() });
+  const reports = payload.reports || [];
+  panel.classList.toggle("hidden", !reports.length);
+  list.innerHTML = reports.map(renderMyBugReport).join("");
+}
+
 async function clearProcessedCollaborationRequests() {
   const payload = await requestJson("/api/my/collaboration-requests/processed", { method: "DELETE", headers: authHeaders() });
   await loadCollaborationRequests();
@@ -1702,7 +1992,7 @@ async function setupAdminPage() {
   if (!dashboard) return;
   const user = getStoredUser();
   const locked = document.querySelector("#adminLocked");
-  const panels = [dashboard, document.querySelector("#adminReviewPanel"), document.querySelector("#adminSubmissionPanel"), document.querySelector("#adminContentTools"), document.querySelector("#adminBattleTools"), document.querySelector("#adminGroupTools"), document.querySelector("#adminTreasureTools")];
+  const panels = [dashboard, document.querySelector("#adminReviewPanel"), document.querySelector("#adminBugReportPanel"), document.querySelector("#adminSubmissionPanel"), document.querySelector("#adminContentTools"), document.querySelector("#adminBattleTools"), document.querySelector("#adminGroupTools"), document.querySelector("#adminTreasureTools")];
   if (!user || user.role !== "admin") {
     locked.classList.remove("hidden");
     panels.forEach((panel) => panel?.classList.add("hidden"));
@@ -1715,6 +2005,7 @@ async function setupAdminPage() {
   document.querySelector("#approveAllButton")?.addEventListener("click", approveAllSubmissions);
   document.querySelector("#clearExpiredReviewButton")?.addEventListener("click", clearExpiredReviewSubmissions);
   document.querySelector("#downloadApprovedButton")?.addEventListener("click", downloadApprovedChartsWithAuth);
+  ensureAdminArchiveOptions();
   document.querySelector("#adminBattleFilter")?.addEventListener("change", (event) => {
     currentAdminBattleFilter = event.target.value;
     updateAdminArchiveButton();
@@ -1728,7 +2019,7 @@ async function setupAdminPage() {
   setupBattleForm();
   setupMapperGroupForm();
   setupAdminGroupMemberTools();
-  await Promise.all([loadCodes(), loadAdminSubmissions(), loadAdminReviewSubmissions(), loadAdminChartRequests(), loadAdminCollections(), loadAdminBackgrounds(), loadAdminTreasureDrops(), loadAdminSchedules(), loadAdminBattles(), loadAdminMapperGroups(), loadAdminUsers()]);
+  await Promise.all([loadCodes(), loadAdminSubmissions(), loadAdminReviewSubmissions(), loadAdminBugReports(), loadAdminChartRequests(), loadAdminCollections(), loadAdminBackgrounds(), loadAdminTreasureDrops(), loadAdminSchedules(), loadAdminBattles(), loadAdminMapperGroups(), loadAdminUsers()]);
   if (location.hash === "#review") document.querySelector("#adminReviewPanel")?.scrollIntoView({ block: "start" });
 }
 
@@ -1808,6 +2099,13 @@ async function loadAdminReviewSubmissions() {
   const url = currentAdminBattleFilter ? `/api/admin/submissions?status=review&battleId=${encodeURIComponent(currentAdminBattleFilter)}` : "/api/admin/submissions?status=review";
   const payload = await requestJson(url, { headers: authHeaders() });
   list.innerHTML = payload.submissions.length ? payload.submissions.map(renderAdminSubmission).join("") : emptyText("暂无待审核谱面。");
+}
+
+async function loadAdminBugReports() {
+  const list = document.querySelector("#adminBugReportList");
+  if (!list) return;
+  const payload = await requestJson("/api/admin/bug-reports", { headers: authHeaders() });
+  list.innerHTML = payload.reports.length ? payload.reports.map(renderAdminBugReport).join("") : emptyText("暂无Bug报告。");
 }
 async function loadAdminChartRequests() {
   const list = document.querySelector("#adminChartRequests");
@@ -2043,12 +2341,19 @@ async function loadAdminBattles() {
 
 function updateAdminArchiveButton(currentApprovedCount = null) {
   const button = document.querySelector("#downloadApprovedButton");
+  const rawButton = document.querySelector("#downloadApprovedRawButton");
   if (!button) return;
+  button.classList.add("download-button");
   const battle = adminBattles.find((item) => item.id === currentAdminBattleFilter);
   const count = battle ? Number(battle.finalSubmissionCount || 0) : Number(currentApprovedCount || 0);
   const enabled = Boolean(currentAdminBattleFilter && count > 0);
   button.disabled = !enabled;
   button.title = currentAdminBattleFilter ? (enabled ? "" : "暂无可下载谱面") : "请先选择一个无名战";
+  if (rawButton) {
+    rawButton.classList.toggle("hidden", !battle?.optionalChecks?.aafAccNormalize);
+    rawButton.disabled = !enabled;
+    rawButton.title = button.title;
+  }
 }
 
 function setupMapperGroupForm() {
@@ -2198,7 +2503,8 @@ async function downloadApprovedChartsWithAuth() {
     return;
   }
   try {
-    const response = await fetch(`/api/admin/battles/${encodeURIComponent(currentAdminBattleFilter)}/download-approved`, {
+    const options = readArchiveDownloadOptions("admin");
+    const response = await fetch(buildArchiveDownloadUrl(`/api/admin/battles/${encodeURIComponent(currentAdminBattleFilter)}/download-approved`, options), {
       headers: authHeaders()
     });
     if (!response.ok) {
@@ -2254,6 +2560,39 @@ function renderSubmissionItem(submission) {
   return `<article class="submission-item"><div class="item-top"><strong>${escapeHtml(submission.songId || submission.battleTitle)}</strong><div class="item-top-actions"><span class="status ${submission.status}">${statusLabel(submission.status)}</span>${retryLink}${withdrawButton}</div></div><div class="submission-meta"><span>${submissionDivisionLabel(submission)}</span><span>${escapeHtml(submission.battleTitle)}</span><span>${escapeHtml(submission.originalFileName || "无文件名")}</span><span>${formatBytes(submission.fileSize)}</span><span>提交：${formatDate(submission.createdAt)}</span>${editLink}</div>${collaboratorText}${rejection}</article>`;
 }
 
+async function downloadApprovedRawChartsWithAuth() {
+  const button = document.querySelector("#downloadApprovedRawButton");
+  if (button?.disabled) return;
+  if (!currentAdminBattleFilter) {
+    setMessage("#battleMessage", "请先在全部提交谱面栏目选择一个无名战。", "error");
+    return;
+  }
+  try {
+    const response = await fetch(buildArchiveDownloadUrl(`/api/admin/battles/${encodeURIComponent(currentAdminBattleFilter)}/download-approved`, { rawArchive: true }), {
+      headers: authHeaders()
+    });
+    if (!response.ok) {
+      let message = "下载失败";
+      try {
+        const payload = await response.json();
+        message = payload.error || message;
+      } catch {
+        // The download endpoint normally returns a zip, so JSON may not be available.
+      }
+      throw new Error(message);
+    }
+    await saveBlobResponse(response, "approved-original-charts.zip");
+    setMessage("#battleMessage", "已开始下载参赛谱面原件。", "success");
+  } catch (error) {
+    setMessage("#battleMessage", error.message, "error");
+  }
+}
+
+function renderMyBugReport(report) {
+  const errors = report.errors?.length ? `<p class="note">自动检查提示：${report.errors.map(escapeHtml).join("；")}</p>` : "";
+  const response = report.response ? `<p class="note">管理员回应：${escapeHtml(report.response)}</p>` : "";
+  return `<article class="submission-item"><div class="item-top"><strong>${escapeHtml(report.songId || report.battleTitle)}</strong><span class="status ${escapeAttr(report.status)}">${bugReportStatusLabel(report.status)}</span></div><div class="submission-meta"><span>${escapeHtml(report.battleTitle)}</span><span>${escapeHtml(report.originalFileName || "无文件名")}</span><span>${formatBytes(report.fileSize)}</span><span>报告：${formatDate(report.createdAt)}</span></div>${errors}${response}</article>`;
+}
 
 function renderAdminSubmission(submission) {
   const reviewControls = submission.status === "approved" ? "" : `<div class="review-actions"><input placeholder="驳回时必填审核意见" data-note="${escapeAttr(submission.id)}"><button type="button" onclick="reviewSubmission('${escapeAttr(submission.id)}', 'approved')">通过</button><button type="button" class="danger-button" onclick="reviewSubmission('${escapeAttr(submission.id)}', 'rejected')">驳回</button></div>`;
@@ -2261,6 +2600,16 @@ function renderAdminSubmission(submission) {
     ? `<span class="disabled-file-link" aria-disabled="true">查看文件</span>`
     : `<a href="${escapeHtml(submission.fileUrl)}" target="_blank">查看文件</a>`;
   return `<article class="submission-item"><div class="item-top"><strong>${escapeHtml(submission.songId)}</strong><span class="status ${escapeAttr(submission.status)}">${statusLabel(submission.status)}</span></div><div class="submission-meta"><span>谱师：${escapeHtml(submission.chartName)}</span><span>组别：${submissionDivisionLabel(submission)}</span><span>无名战：${escapeHtml(submission.battleTitle)}</span><span>提交：${formatDate(submission.createdAt)}</span>${fileLink}</div>${submission.collaborators?.length ? `<p class="note">合作对象：${submission.collaborators.map((item) => `${escapeHtml(item.chartName)}（${statusLabel(item.status)}）`).join("、")}</p>` : ""}${submission.reviewNote && submission.status !== "approved" ? `<p class="note">审核意见：${escapeHtml(submission.reviewNote)}</p>` : ""}${reviewControls}</article>`;
+}
+
+function renderAdminBugReport(report) {
+  const errors = report.errors?.length ? `<p class="note">自动检查提示：${report.errors.map(escapeHtml).join("；")}</p>` : "";
+  const response = report.response ? `<p class="note">已回应：${escapeHtml(report.response)}</p>` : "";
+  const fileLink = report.fileUrl ? `<a href="${escapeHtml(report.fileUrl)}" target="_blank">下载报告压缩包</a>` : "<span>文件不存在</span>";
+  const actions = report.status === "pending"
+    ? `<div class="review-actions"><input placeholder="回应内容" data-bug-report-response="${escapeAttr(report.id)}"><button type="button" onclick="reviewBugReport('${escapeAttr(report.id)}', false)">回应</button><button type="button" class="danger-button" onclick="reviewBugReport('${escapeAttr(report.id)}', true)">回应并封禁Bug Report</button></div>`
+    : "";
+  return `<article class="submission-item"><div class="item-top"><strong>${escapeHtml(report.songId || report.battleTitle)}</strong><span class="status ${escapeAttr(report.status)}">${bugReportStatusLabel(report.status)}</span></div><div class="submission-meta"><span>谱师：${escapeHtml(report.chartName || report.username)}</span><span>无名战：${escapeHtml(report.battleTitle)}</span><span>${escapeHtml(report.originalFileName || "无文件名")}</span><span>${formatBytes(report.fileSize)}</span><span>报告：${formatDate(report.createdAt)}</span>${fileLink}</div>${errors}${response}${actions}</article>`;
 }
 
 function renderCollaborationRequest(request) {
@@ -2300,8 +2649,9 @@ function renderAdminBattle(battle) {
   const locks = battle.settingLocks || {};
   const limitText = `上限：个人 ${formatLimit(limits.solo)} / 合作 ${formatLimit(limits.collab)} / Bonus ${formatLimit(limits.bonus)}`;
   const divisionText = battle.divisionMode === "custom" ? `自定义分组：${(battle.customDivisions || []).map((item) => escapeHtml(item.name)).join("、")}` : "标准分组";
+  const websiteDownloadText = battle.provideWebsiteDownload ? "提供网站下载：开启" : "提供网站下载：关闭";
   const optionalText = battle.optionalCheckDescriptions?.length ? `可选检查：${battle.optionalCheckDescriptions.map(escapeHtml).join("；")}` : "可选检查：未启用";
-  return `<article class="submission-item"><strong>${escapeHtml(battle.title)}</strong><p>${escapeHtml(battle.description || "暂无简介")}</p><div class="submission-meta"><span>${escapeHtml(battle.phaseLabel)}</span><span>${groupText}</span><span>${hosts}</span><span>${limitText}</span><span>${divisionText}</span><span>${optionalText}</span><span>写谱：${formatDate(battle.writingStartTime)} - ${formatDate(battle.writingEndTime)}</span><span>整理：${formatDate(battle.packingStartTime)} - ${formatDate(battle.packingEndTime)}</span><span>狙击：${formatDate(battle.snipingStartTime)} - ${formatDate(battle.snipingEndTime)}</span></div><div class="review-actions"><button type="button" data-id="${escapeAttr(battle.id)}" data-title="${escapeAttr(battle.title)}" data-description="${escapeAttr(battle.description || "")}" data-allowed-group-id="${escapeAttr(battle.allowedGroupId || "")}" data-host-user-ids="${escapeAttr(JSON.stringify(battle.hostUserIds || []))}" data-solo-limit="${escapeAttr(limits.solo ?? "")}" data-collab-limit="${escapeAttr(limits.collab ?? "")}" data-bonus-limit="${escapeAttr(limits.bonus ?? "")}" data-duration-enabled="${checks.duration?.enabled ? "true" : ""}" data-duration-min="${escapeAttr(checks.duration?.min ?? "")}" data-duration-max="${escapeAttr(checks.duration?.max ?? "")}" data-difficulty-enabled="${checks.difficulty?.enabled ? "true" : ""}" data-difficulty-min="${escapeAttr(checks.difficulty?.min ?? "")}" data-difficulty-max="${escapeAttr(checks.difficulty?.max ?? "")}" data-no-eternal="${checks.noEternal ? "true" : ""}" data-aff-type-check="${checks.affTypeCheck ? "true" : ""}" data-aaf-acc-normalize="${checks.aafAccNormalize ? "true" : ""}" data-aff-syntax="${escapeAttr(JSON.stringify(checks.affSyntax || {}))}" data-lock-description="${locks.description ? "true" : ""}" data-lock-banner="${locks.banner ? "true" : ""}" data-lock-rules="${locks.rules ? "true" : ""}" data-lock-duration-check="${optionalCheckLocked(locks, "duration") ? "true" : ""}" data-lock-difficulty-check="${optionalCheckLocked(locks, "difficulty") ? "true" : ""}" data-lock-no-eternal-check="${optionalCheckLocked(locks, "noEternal") ? "true" : ""}" data-lock-aff-type-check="${optionalCheckLocked(locks, "affTypeCheck") ? "true" : ""}" data-lock-aaf-acc-normalize-check="${optionalCheckLocked(locks, "aafAccNormalize") ? "true" : ""}" data-division-mode="${escapeAttr(battle.divisionMode || "standard")}" data-custom-divisions="${escapeAttr(JSON.stringify(battle.customDivisions || []))}" data-writing-start="${escapeAttr(battle.writingStartTime)}" data-writing-end="${escapeAttr(battle.writingEndTime)}" data-packing-start="${escapeAttr(battle.packingStartTime)}" data-packing-end="${escapeAttr(battle.packingEndTime)}" data-sniping-start="${escapeAttr(battle.snipingStartTime)}" data-sniping-end="${escapeAttr(battle.snipingEndTime)}" onclick="editBattleFromButton(this)">编辑</button><button type="button" class="danger-button" onclick="deleteBattle('${battle.id}')">删除</button></div></article>`;
+  return `<article class="submission-item"><strong>${escapeHtml(battle.title)}</strong><p>${escapeHtml(battle.description || "暂无简介")}</p><div class="submission-meta"><span>${escapeHtml(battle.phaseLabel)}</span><span>${groupText}</span><span>${hosts}</span><span>${limitText}</span><span>${websiteDownloadText}</span><span>${divisionText}</span><span>${optionalText}</span><span>写谱：${formatDate(battle.writingStartTime)} - ${formatDate(battle.writingEndTime)}</span><span>整理：${formatDate(battle.packingStartTime)} - ${formatDate(battle.packingEndTime)}</span><span>狙击：${formatDate(battle.snipingStartTime)} - ${formatDate(battle.snipingEndTime)}</span></div><div class="review-actions"><button type="button" data-id="${escapeAttr(battle.id)}" data-title="${escapeAttr(battle.title)}" data-description="${escapeAttr(battle.description || "")}" data-provide-website-download="${battle.provideWebsiteDownload ? "true" : ""}" data-allowed-group-id="${escapeAttr(battle.allowedGroupId || "")}" data-host-user-ids="${escapeAttr(JSON.stringify(battle.hostUserIds || []))}" data-solo-limit="${escapeAttr(limits.solo ?? "")}" data-collab-limit="${escapeAttr(limits.collab ?? "")}" data-bonus-limit="${escapeAttr(limits.bonus ?? "")}" data-duration-enabled="${checks.duration?.enabled ? "true" : ""}" data-duration-min="${escapeAttr(checks.duration?.min ?? "")}" data-duration-max="${escapeAttr(checks.duration?.max ?? "")}" data-difficulty-enabled="${checks.difficulty?.enabled ? "true" : ""}" data-difficulty-min="${escapeAttr(checks.difficulty?.min ?? "")}" data-difficulty-max="${escapeAttr(checks.difficulty?.max ?? "")}" data-no-eternal="${checks.noEternal ? "true" : ""}" data-aff-type-check="${checks.affTypeCheck ? "true" : ""}" data-aaf-acc-normalize="${checks.aafAccNormalize ? "true" : ""}" data-aff-syntax="${escapeAttr(JSON.stringify(checks.affSyntax || {}))}" data-lock-description="${locks.description ? "true" : ""}" data-lock-banner="${locks.banner ? "true" : ""}" data-lock-rules="${locks.rules ? "true" : ""}" data-lock-duration-check="${optionalCheckLocked(locks, "duration") ? "true" : ""}" data-lock-difficulty-check="${optionalCheckLocked(locks, "difficulty") ? "true" : ""}" data-lock-no-eternal-check="${optionalCheckLocked(locks, "noEternal") ? "true" : ""}" data-lock-aff-type-check="${optionalCheckLocked(locks, "affTypeCheck") ? "true" : ""}" data-lock-aaf-acc-normalize-check="${optionalCheckLocked(locks, "aafAccNormalize") ? "true" : ""}" data-division-mode="${escapeAttr(battle.divisionMode || "standard")}" data-custom-divisions="${escapeAttr(JSON.stringify(battle.customDivisions || []))}" data-writing-start="${escapeAttr(battle.writingStartTime)}" data-writing-end="${escapeAttr(battle.writingEndTime)}" data-packing-start="${escapeAttr(battle.packingStartTime)}" data-packing-end="${escapeAttr(battle.packingEndTime)}" data-sniping-start="${escapeAttr(battle.snipingStartTime)}" data-sniping-end="${escapeAttr(battle.snipingEndTime)}" onclick="editBattleFromButton(this)">编辑</button><button type="button" class="danger-button" onclick="deleteBattle('${battle.id}')">删除</button></div></article>`;
 }
 
 async function reviewSubmission(id, status) {
@@ -2312,6 +2662,17 @@ async function reviewSubmission(id, status) {
   }
   await requestJson(`/api/admin/submissions/${id}/review`, { method: "PATCH", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ status, reviewNote: note }) });
   await Promise.all([loadAdminSubmissions(), loadAdminReviewSubmissions()]);
+}
+
+async function reviewBugReport(id, banUser) {
+  const response = document.querySelector(`[data-bug-report-response="${id}"]`)?.value || "";
+  await requestJson(`/api/admin/bug-reports/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ status: "responded", response, banUser })
+  });
+  setMessage("#bugReportMessage", banUser ? "已回应并封禁该用户的 Bug Report 功能。" : "Bug 报告已回应。", "success");
+  await loadAdminBugReports();
 }
 
 async function reviewChartRequest(id, status) {
@@ -2401,6 +2762,7 @@ function editBattleFromButton(button) {
   form.elements.id.value = button.dataset.id;
   form.title.value = button.dataset.title;
   form.description.value = button.dataset.description;
+  if (form.provideWebsiteDownload) form.provideWebsiteDownload.checked = button.dataset.provideWebsiteDownload === "true";
   form.allowedGroupId.value = button.dataset.allowedGroupId || "";
   form.soloLimit.value = button.dataset.soloLimit || "";
   form.collabLimit.value = button.dataset.collabLimit || "";
@@ -2434,6 +2796,7 @@ function editBattleFromButton(button) {
   }
   form.banner.value = "";
   form.rules.value = "";
+  if (form.answerSheet) form.answerSheet.value = "";
   form.writingStartTime.value = toDatetimeLocal(button.dataset.writingStart);
   form.writingEndTime.value = toDatetimeLocal(button.dataset.writingEnd);
   form.packingStartTime.value = toDatetimeLocal(button.dataset.packingStart);
@@ -2653,6 +3016,14 @@ function statusLabel(status) {
 
 function collaboratorStatusLabel(status) {
   return status === "pending" ? "待接受" : statusLabel(status);
+}
+
+function bugReportStatusLabel(status) {
+  return {
+    pending: "待回应",
+    responded: "已回应",
+    closed: "已关闭"
+  }[status] || status;
 }
 
 function loadingText() {

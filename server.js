@@ -3,6 +3,10 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const zlib = require("zlib");
+const os = require("os");
+const { spawnSync } = require("child_process");
+const { PassThrough, Readable } = require("stream");
+const PImage = require("pureimage");
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -14,8 +18,10 @@ const BATTLE_UPLOAD_DIR = "ab";
 const JACKET_UPLOAD_DIR = "jackets";
 const COLLECTION_JACKET_UPLOAD_DIR = "collectionjacket";
 const TREASURE_CHEST_UPLOAD_DIR = "treasurechest";
+const BUG_REPORT_UPLOAD_DIR = "bugreports";
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const SUBMISSIONS_FILE = path.join(DATA_DIR, "submissions.json");
+const BUG_REPORTS_FILE = path.join(DATA_DIR, "bug-reports.json");
 const CODES_FILE = path.join(DATA_DIR, "registration-codes.json");
 const REQUESTS_FILE = path.join(DATA_DIR, "chart-name-requests.json");
 const COLLECTIONS_FILE = path.join(DATA_DIR, "collections.json");
@@ -29,6 +35,7 @@ const BGS_FILE = path.join(DATA_DIR, "backgrounds.json");
 const MAX_BODY_SIZE = 25 * 1024 * 1024;
 const MAX_CHART_ZIP_SIZE = 12.8 * 1024 * 1024;
 const DAILY_CHART_SUBMISSION_LIMIT = 5;
+const DAILY_BUG_REPORT_LIMIT = 3;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin@123456";
 const OPTIONAL_CHECK_KEYS = ["duration", "difficulty", "noEternal", "affTypeCheck", "aafAccNormalize"];
@@ -65,8 +72,10 @@ function ensureStorage() {
   fs.mkdirSync(uploadPath(JACKET_UPLOAD_DIR), { recursive: true });
   fs.mkdirSync(uploadPath(COLLECTION_JACKET_UPLOAD_DIR), { recursive: true });
   fs.mkdirSync(uploadPath(TREASURE_CHEST_UPLOAD_DIR), { recursive: true });
+  fs.mkdirSync(uploadPath(BUG_REPORT_UPLOAD_DIR), { recursive: true });
   ensureJsonFile(USERS_FILE, []);
   ensureJsonFile(SUBMISSIONS_FILE, []);
+  ensureJsonFile(BUG_REPORTS_FILE, []);
   ensureJsonFile(CODES_FILE, []);
   ensureJsonFile(REQUESTS_FILE, []);
   ensureJsonFile(COLLECTIONS_FILE, []);
@@ -176,6 +185,10 @@ function migrateBattles() {
       battle.submissionLimits = { solo: "", collab: "", bonus: "" };
       changed = true;
     }
+    if (typeof battle.provideWebsiteDownload !== "boolean") {
+      battle.provideWebsiteDownload = false;
+      changed = true;
+    }
     if (!battle.optionalChecks || typeof battle.optionalChecks !== "object") {
       battle.optionalChecks = {
         duration: { enabled: false, min: "", max: "" },
@@ -244,6 +257,7 @@ function migrateUploadLayout() {
   battles.forEach((battle) => {
     if (moveUploadField(battle, "bannerFileName", battleUploadDir(battle.id, "banner"))) battlesChanged = true;
     if (moveUploadField(battle, "rulesFileName", battleUploadDir(battle.id, "data"))) battlesChanged = true;
+    if (moveUploadField(battle, "answerSheetFileName", battleUploadDir(battle.id, "data"))) battlesChanged = true;
   });
   if (battlesChanged) writeJsonFile(BATTLES_FILE, battles);
 
@@ -508,7 +522,7 @@ async function handleApi(req, res) {
       sendJson(res, 403, { error: "仅参赛谱师可以下载该无名战谱面" });
       return;
     }
-    sendBattleArchive(res, battle);
+    await sendBattleArchive(res, battle);
     return;
   }
 
@@ -573,6 +587,40 @@ async function handleApi(req, res) {
     return;
   }
 
+  const battleAnswerSheetDownloadMatch = url.pathname.match(/^\/api\/battles\/([^/]+)\/answer-sheet$/);
+  if (req.method === "GET" && battleAnswerSheetDownloadMatch) {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const battle = readJsonFile(BATTLES_FILE).find((item) => item.id === battleAnswerSheetDownloadMatch[1]);
+    if (!battle) {
+      sendJson(res, 404, { error: "无名战不存在" });
+      return;
+    }
+    if (battlePhase(battle).kind !== "sniping") {
+      sendJson(res, 403, { error: "答题卡仅在狙击阶段开放下载" });
+      return;
+    }
+    if (!canDownloadBattleAnswerSheet(user, battle)) {
+      sendJson(res, 403, { error: "无法下载该无名战答题卡" });
+      return;
+    }
+    if (!battle.answerSheetFileName) {
+      sendJson(res, 404, { error: "暂无答题卡" });
+      return;
+    }
+    const filePath = uploadPath(battle.answerSheetFileName);
+    if (!fs.existsSync(filePath)) {
+      sendJson(res, 404, { error: "暂无答题卡" });
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": battle.answerSheetMimeType || "application/octet-stream",
+      "Content-Disposition": contentDisposition(battle.answerSheetOriginalFileName || `${battle.title}-answer-sheet`)
+    });
+    fs.createReadStream(filePath).pipe(res);
+    return;
+  }
+
   const hostSubmissionsMatch = url.pathname.match(/^\/api\/host\/battles\/([^/]+)\/submissions$/);
   if (req.method === "GET" && hostSubmissionsMatch) {
     const host = requireBattleHost(req, res, hostSubmissionsMatch[1]);
@@ -601,6 +649,7 @@ async function handleApi(req, res) {
       collab: normalizeSubmissionLimit(body.collabLimit),
       bonus: normalizeSubmissionLimit(body.bonusLimit)
     };
+    const provideWebsiteDownload = clean(body.provideWebsiteDownload) === "on" || clean(body.provideWebsiteDownload) === "true";
     const locks = normalizeSettingLocks(host.battle.settingLocks);
     const optionalChecks = mergeOptionalChecksByLocks(normalizeOptionalChecks(host.battle.optionalChecks), buildOptionalChecks(body), locks.optionalChecks);
     const divisionMode = clean(body.divisionMode) === "custom" ? "custom" : "standard";
@@ -633,6 +682,7 @@ async function handleApi(req, res) {
     const battles = readJsonFile(BATTLES_FILE);
     const battle = battles.find((item) => item.id === host.battle.id);
     battle.submissionLimits = submissionLimits;
+    battle.provideWebsiteDownload = provideWebsiteDownload;
     battle.optionalChecks = optionalChecks;
     battle.divisionMode = divisionMode;
     battle.customDivisions = customDivisions;
@@ -662,6 +712,30 @@ async function handleApi(req, res) {
     battle.rulesFileName = result.fileName;
     battle.rulesOriginalFileName = result.originalFileName;
     battle.updatedAt = new Date().toISOString();
+    writeJsonFile(BATTLES_FILE, battles);
+    sendJson(res, 200, { battle: publicBattle(battle, host.user) });
+    return;
+  }
+
+  const hostAnswerSheetMatch = url.pathname.match(/^\/api\/host\/battles\/([^/]+)\/answer-sheet$/);
+  if (req.method === "POST" && hostAnswerSheetMatch) {
+    const host = requireBattleHost(req, res, hostAnswerSheetMatch[1]);
+    if (!host) return;
+    const form = await readMultipartForm(req, res);
+    if (!form) return;
+    const result = saveBattleAnswerSheetFile(host.battle.id, form.files.answerSheet);
+    if (!result.ok) {
+      sendJson(res, 400, { error: result.error });
+      return;
+    }
+    const battles = readJsonFile(BATTLES_FILE);
+    const battle = battles.find((item) => item.id === host.battle.id);
+    if (result.fileName) {
+      battle.answerSheetFileName = result.fileName;
+      battle.answerSheetOriginalFileName = result.originalFileName;
+      battle.answerSheetMimeType = result.mimeType;
+      battle.updatedAt = new Date().toISOString();
+    }
     writeJsonFile(BATTLES_FILE, battles);
     sendJson(res, 200, { battle: publicBattle(battle, host.user) });
     return;
@@ -702,7 +776,49 @@ async function handleApi(req, res) {
   if (req.method === "GET" && hostArchiveMatch) {
     const host = requireBattleHost(req, res, hostArchiveMatch[1]);
     if (!host) return;
-    sendBattleArchive(res, host.battle, { includeAll: true });
+    await sendBattleArchive(res, host.battle, {
+      includeAll: true,
+      applySonglistMerge: url.searchParams.get("applySonglistMerge") === "1",
+      autoCropPreview: url.searchParams.get("autoCropPreview") === "1",
+      rawArchive: url.searchParams.get("rawArchive") === "1"
+    });
+    return;
+  }
+
+  const hostParticipantImageMatch = url.pathname.match(/^\/api\/host\/battles\/([^/]+)\/participant-info-image$/);
+  if (req.method === "GET" && hostParticipantImageMatch) {
+    const host = requireBattleHost(req, res, hostParticipantImageMatch[1]);
+    if (!host) return;
+    const phase = battlePhase(host.battle).kind;
+    if (!["packing", "sniping"].includes(phase)) {
+      sendJson(res, 403, { error: "仅整理阶段与狙击阶段可以生成参赛信息图片" });
+      return;
+    }
+    const includeJackets = url.searchParams.get("includeJackets") === "1";
+    const image = await buildParticipantInfoImage(host.battle, { includeJackets });
+    res.writeHead(200, {
+      "Content-Type": "image/jpeg",
+      "Content-Disposition": contentDisposition(`${host.battle.title}_Info.jpg`)
+    });
+    res.end(image);
+    return;
+  }
+
+  const hostParticipantCsvMatch = url.pathname.match(/^\/api\/host\/battles\/([^/]+)\/participant-info-csv$/);
+  if (req.method === "GET" && hostParticipantCsvMatch) {
+    const host = requireBattleHost(req, res, hostParticipantCsvMatch[1]);
+    if (!host) return;
+    const phase = battlePhase(host.battle).kind;
+    if (!["packing", "sniping"].includes(phase)) {
+      sendJson(res, 403, { error: "仅整理阶段与狙击阶段可以生成参赛信息表格" });
+      return;
+    }
+    const csv = await buildParticipantInfoCsv(host.battle);
+    res.writeHead(200, {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": contentDisposition(`${host.battle.title}_Info.csv`)
+    });
+    res.end(Buffer.concat([Buffer.from("\uFEFF", "utf8"), Buffer.from(csv, "utf8")]));
     return;
   }
 
@@ -859,6 +975,83 @@ async function handleApi(req, res) {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map(publicSubmission);
     sendJson(res, 200, { submissions });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/my/bug-reports") {
+    const user = requireUser(req, res);
+    if (!user) return;
+    const reports = readJsonFile(BUG_REPORTS_FILE)
+      .filter((report) => report.userId === user.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(publicBugReport);
+    sendJson(res, 200, { reports });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bug-reports") {
+    const user = requireUser(req, res);
+    if (!user) return;
+    if (user.role !== "user") {
+      sendJson(res, 403, { error: "管理员无需提交 Bug 报告" });
+      return;
+    }
+    if (user.bugReportBanned) {
+      sendJson(res, 403, { error: "当前账号已被限制提交 Bug 报告" });
+      return;
+    }
+    if (dailyBugReportCount(user.id) >= DAILY_BUG_REPORT_LIMIT) {
+      sendJson(res, 429, { error: "今日 Bug 报告次数已达上限" });
+      return;
+    }
+    const form = await readMultipartForm(req, res);
+    if (!form) return;
+    const battleId = clean(form.fields.battleId);
+    const songId = clean(form.fields.songId);
+    const division = clean(form.fields.division);
+    const errors = parseJsonArray(form.fields.errors).map(clean).filter(Boolean);
+    const battle = readJsonFile(BATTLES_FILE).find((item) => item.id === battleId);
+    const chartFile = form.files.chartFile;
+    if (!battle || !songId) {
+      sendJson(res, 400, { error: "Bug 报告缺少无名战或 songid 信息" });
+      return;
+    }
+    if (!chartFile || !chartFile.data.length) {
+      sendJson(res, 400, { error: "Bug 报告需要附带谱面压缩包" });
+      return;
+    }
+    if (chartFile.data.length > MAX_CHART_ZIP_SIZE) {
+      sendJson(res, 400, { error: "谱面压缩包过大（超过12.8MB）" });
+      return;
+    }
+    const safeName = sanitizeFileName(chartFile.filename || `${songId}.zip`);
+    if (path.extname(safeName).toLowerCase() !== ".zip") {
+      sendJson(res, 400, { error: "Bug 报告仅接受 zip 谱面压缩包" });
+      return;
+    }
+    const reports = readJsonFile(BUG_REPORTS_FILE);
+    const report = {
+      id: crypto.randomUUID(),
+      userId: user.id,
+      username: user.username,
+      chartName: user.chartName,
+      battleId: battle.id,
+      battleTitle: battle.title,
+      division,
+      songId,
+      errors,
+      originalFileName: safeName,
+      savedFileName: saveUpload(chartFile.data, safeName, BUG_REPORT_UPLOAD_DIR),
+      fileSize: chartFile.data.length,
+      status: "pending",
+      response: "",
+      respondedBy: "",
+      respondedAt: "",
+      createdAt: new Date().toISOString()
+    };
+    reports.push(report);
+    writeJsonFile(BUG_REPORTS_FILE, reports);
+    sendJson(res, 201, { report: publicBugReport(report) });
     return;
   }
 
@@ -1362,6 +1555,62 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/bug-reports") {
+    const admin = requireAdmin(req, res);
+    if (!admin) return;
+    const reports = readJsonFile(BUG_REPORTS_FILE)
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(adminBugReport);
+    sendJson(res, 200, { reports });
+    return;
+  }
+
+  const bugReportReviewMatch = url.pathname.match(/^\/api\/admin\/bug-reports\/([^/]+)$/);
+  if (req.method === "PATCH" && bugReportReviewMatch) {
+    const admin = requireAdmin(req, res);
+    if (!admin) return;
+    const body = await readJson(req);
+    const reports = readJsonFile(BUG_REPORTS_FILE);
+    const report = reports.find((item) => item.id === bugReportReviewMatch[1]);
+    if (!report) {
+      sendJson(res, 404, { error: "Bug 报告不存在" });
+      return;
+    }
+    if ((report.status || "pending") !== "pending") {
+      sendJson(res, 409, { error: "该 Bug 报告已经回应过" });
+      return;
+    }
+    const response = clean(body.response);
+    const status = clean(body.status) || "responded";
+    if (!["pending", "responded", "closed"].includes(status)) {
+      sendJson(res, 400, { error: "Bug 报告状态不正确" });
+      return;
+    }
+    if (status !== "pending" && !response) {
+      sendJson(res, 400, { error: "回应内容不能为空" });
+      return;
+    }
+    report.status = status;
+    report.response = response;
+    report.respondedBy = admin.username;
+    report.respondedAt = new Date().toISOString();
+    if (body.banUser === true || clean(body.banUser) === "true") {
+      const users = readJsonFile(USERS_FILE);
+      const target = users.find((user) => user.id === report.userId);
+      if (target) {
+        target.bugReportBanned = true;
+        target.bugReportBannedAt = new Date().toISOString();
+        target.bugReportBannedBy = admin.username;
+        writeJsonFile(USERS_FILE, users);
+      }
+      report.userBanned = true;
+    }
+    writeJsonFile(BUG_REPORTS_FILE, reports);
+    sendJson(res, 200, { report: adminBugReport(report) });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/submissions/clear-expired-review") {
     const admin = requireAdmin(req, res);
     if (!admin) return;
@@ -1416,7 +1665,11 @@ async function handleApi(req, res) {
       sendJson(res, 404, { error: "无名战不存在" });
       return;
     }
-    sendBattleArchive(res, battle);
+    await sendBattleArchive(res, battle, {
+      applySonglistMerge: url.searchParams.get("applySonglistMerge") === "1",
+      autoCropPreview: url.searchParams.get("autoCropPreview") === "1",
+      rawArchive: url.searchParams.get("rawArchive") === "1"
+    });
     return;
   }
 
@@ -1773,6 +2026,16 @@ async function handleApi(req, res) {
       item.rulesFileName = rules.fileName;
       item.rulesOriginalFileName = rules.originalFileName;
     }
+    const answerSheet = saveBattleAnswerSheetFile(nextId, form.files.answerSheet);
+    if (!answerSheet.ok) {
+      sendJson(res, 400, { error: answerSheet.error });
+      return;
+    }
+    if (answerSheet.fileName) {
+      item.answerSheetFileName = answerSheet.fileName;
+      item.answerSheetOriginalFileName = answerSheet.originalFileName;
+      item.answerSheetMimeType = answerSheet.mimeType;
+    }
     battles.push(item);
     writeJsonFile(BATTLES_FILE, battles);
     sendJson(res, 201, { battle: publicBattle(item) });
@@ -1809,6 +2072,16 @@ async function handleApi(req, res) {
     if (rules.fileName) {
       item.rulesFileName = rules.fileName;
       item.rulesOriginalFileName = rules.originalFileName;
+    }
+    const answerSheet = saveBattleAnswerSheetFile(item.id, form.files.answerSheet);
+    if (!answerSheet.ok) {
+      sendJson(res, 400, { error: answerSheet.error });
+      return;
+    }
+    if (answerSheet.fileName) {
+      item.answerSheetFileName = answerSheet.fileName;
+      item.answerSheetOriginalFileName = answerSheet.originalFileName;
+      item.answerSheetMimeType = answerSheet.mimeType;
     }
     writeJsonFile(BATTLES_FILE, battles);
     sendJson(res, 200, { battle: publicBattle(item) });
@@ -1987,6 +2260,7 @@ function buildBattle(body) {
     collab: normalizeSubmissionLimit(body.collabLimit),
     bonus: normalizeSubmissionLimit(body.bonusLimit)
   };
+  const provideWebsiteDownload = clean(body.provideWebsiteDownload) === "on" || clean(body.provideWebsiteDownload) === "true";
   const optionalChecks = buildOptionalChecks(body);
   const settingLocks = buildSettingLocks(body);
   const divisionMode = clean(body.divisionMode) === "custom" ? "custom" : "standard";
@@ -2039,6 +2313,7 @@ function buildBattle(body) {
       allowedGroupId,
       hostUserIds,
       submissionLimits,
+      provideWebsiteDownload,
       optionalChecks,
       settingLocks,
       divisionMode,
@@ -2115,7 +2390,8 @@ function buildHostBattleSettings(body, currentBattle) {
       snipingStartTime,
       snipingEndTime,
       startTime: writingStartTime,
-      endTime: snipingEndTime
+      endTime: snipingEndTime,
+      provideWebsiteDownload: clean(body.provideWebsiteDownload) === "on" || clean(body.provideWebsiteDownload) === "true"
     }
   };
 }
@@ -2518,6 +2794,17 @@ function saveBattleRulesFile(battleId, file) {
   };
 }
 
+function saveBattleAnswerSheetFile(battleId, file) {
+  if (!file || !file.data || file.data.length === 0) return { ok: true, fileName: "", originalFileName: "", mimeType: "" };
+  const safeName = sanitizeFileName(file.filename || "answer-sheet");
+  return {
+    ok: true,
+    fileName: saveUpload(file.data, safeName, battleUploadDir(battleId, "data")),
+    originalFileName: safeName,
+    mimeType: file.contentType || "application/octet-stream"
+  };
+}
+
 function publicUser(user) {
   return {
     id: user.id,
@@ -2528,9 +2815,39 @@ function publicUser(user) {
     bilibili: user.bilibili || "",
     bio: user.bio || "",
     showSubmissions: Boolean(user.showSubmissions),
+    bugReportBanned: Boolean(user.bugReportBanned),
     hostedBattles: publicUserHostedBattles(user.id),
     groupIds: user.groupIds || [],
     createdAt: user.createdAt
+  };
+}
+
+function publicBugReport(report) {
+  return {
+    id: report.id,
+    battleId: report.battleId || "",
+    battleTitle: report.battleTitle || "",
+    division: report.division || "",
+    songId: report.songId || "",
+    errors: report.errors || [],
+    originalFileName: report.originalFileName || "",
+    fileSize: report.fileSize || 0,
+    status: report.status || "pending",
+    response: report.response || "",
+    respondedBy: report.respondedBy || "",
+    respondedAt: report.respondedAt || "",
+    createdAt: report.createdAt || ""
+  };
+}
+
+function adminBugReport(report) {
+  return {
+    ...publicBugReport(report),
+    userId: report.userId || "",
+    username: report.username || "",
+    chartName: report.chartName || "",
+    fileUrl: report.savedFileName ? uploadUrl(report.savedFileName) : "",
+    userBanned: Boolean(report.userBanned)
   };
 }
 
@@ -2628,6 +2945,9 @@ function publicBattle(battle, user = null) {
     hasRules: Boolean(battle.rulesFileName),
     rulesOriginalFileName: battle.rulesOriginalFileName || "",
     canDownloadRules: Boolean(user && canDownloadBattleRules(user, battle)),
+    hasAnswerSheet: Boolean(battle.answerSheetFileName),
+    answerSheetOriginalFileName: battle.answerSheetOriginalFileName || "",
+    canDownloadAnswerSheet: Boolean(user && canDownloadBattleAnswerSheet(user, battle)),
     allowedGroupId: battle.allowedGroupId || "",
     allowedGroupIds,
     allowedGroupName: battle.allowedGroupId ? (groups.find((group) => group.id === battle.allowedGroupId)?.name || "") : "",
@@ -2647,6 +2967,7 @@ function publicBattle(battle, user = null) {
       collab: limits.collab ?? "",
       bonus: limits.bonus ?? ""
     },
+    provideWebsiteDownload: Boolean(battle.provideWebsiteDownload),
     optionalChecks,
     settingLocks: normalizeSettingLocks(battle.settingLocks),
     optionalCheckDescriptions: optionalCheckDescriptions(optionalChecks),
@@ -3043,7 +3364,11 @@ function songlistBasicAutoCheckFailures(submission, songlist) {
 
 function songlistAafAccFailures(submission, zipEntries, songlist, affParseResult = null) {
   const failures = [];
+  const baseOgg = findZipEntryByBaseName(zipEntries, "base.ogg");
+  failures.push(...songlistPreviewFailures(songlist, baseOgg));
+  failures.push(...songlistOverrideFailures(songlist));
   failures.push(...songlistBgFailures(songlist, zipEntries, { checkSize: true }));
+  failures.push(...highResolutionJacketFailures(zipEntries));
   const difficulties = Array.isArray(songlist.difficulties) ? songlist.difficulties : [];
   if (difficulties.some((item) => Number(item.ratingClass) === 3) && difficulties.some((item) => Number(item.ratingClass) === 4)) {
     failures.push("SONGLIST: 同时存在Beyond难度与Eternal难度");
@@ -3058,6 +3383,57 @@ function songlistAafAccFailures(submission, zipEntries, songlist, affParseResult
   }
   failures.push(...specialAudioFailures(zipEntries));
   failures.push(...affStandardizationFailures(affParseResult, zipEntries));
+  return failures;
+}
+
+function songlistOverrideFailures(songlist) {
+  const failures = [];
+  const difficulties = Array.isArray(songlist?.difficulties) ? songlist.difficulties : [];
+  if (difficulties.some((item) => item?.jacketOverride === true)) {
+    failures.push("不支持使用差分曲绘");
+  }
+  if (difficulties.some((item) => item?.audioOverride === true)) {
+    failures.push("不支持使用差分音频，如有需要请分开投稿");
+  }
+  return failures;
+}
+
+function highResolutionJacketFailures(zipEntries) {
+  const failures = [];
+  const base1080 = findZipEntryByBaseName(zipEntries, "1080_base.jpg");
+  if (base1080) {
+    if (!isJpeg(base1080.data)) {
+      failures.push("1080_base.jpg的格式不为jpg");
+    } else if (!hasJpegSize(base1080.data, 768, 768)) {
+      failures.push("1080_base.jpg的大小不为768*768");
+    }
+  }
+  const base1080Small = findZipEntryByBaseName(zipEntries, "1080_base_256.jpg");
+  if (base1080Small) {
+    if (!isJpeg(base1080Small.data)) {
+      failures.push("1080_base_256.jpg的格式不为jpg");
+    } else if (!hasJpegSize(base1080Small.data, 384, 384)) {
+      failures.push("1080_base_256.jpg的大小不为384*384");
+    }
+  }
+  return failures;
+}
+
+function songlistPreviewFailures(songlist, baseOggEntry) {
+  const failures = [];
+  const previewStart = Number(songlist?.audioPreview);
+  const previewEnd = Number(songlist?.audioPreviewEnd);
+  if ((Number.isFinite(previewStart) && previewStart < 0) || (Number.isFinite(previewEnd) && previewEnd < 0)) {
+    failures.push("SONGLIST: audioPreview的值不能为负");
+    return failures;
+  }
+  if (Number.isFinite(previewStart) && Number.isFinite(previewEnd) && previewEnd <= previewStart) {
+    failures.push("SONGLIST: audioPreviewEnd的值必须大于audioPreview");
+  }
+  const durationSeconds = baseOggEntry ? getOggDurationSeconds(baseOggEntry.data) : null;
+  if (Number.isFinite(previewEnd) && durationSeconds !== null && previewEnd > durationSeconds * 1000) {
+    failures.push("SONGLIST: 音频预览范围超过base.ogg长度");
+  }
   return failures;
 }
 
@@ -3813,16 +4189,19 @@ function optionalUser(req) {
 
 function canDownloadBattleCharts(user, battleId) {
   if (!user) return false;
-  if (user.role === "admin") return true;
   const battle = readJsonFile(BATTLES_FILE).find((item) => item.id === battleId);
-  if (battle && canHostBattle(user, battle)) return true;
-  return Boolean(battle && canUserAccessBattle(user, battle));
+  return Boolean(battle && battle.provideWebsiteDownload && canUserAccessBattle(user, battle));
 }
 
 function canDownloadBattleRules(user, battle) {
   if (!user || !battle) return false;
   if (user.role === "admin") return true;
   if (canHostBattle(user, battle)) return true;
+  return canUserAccessBattle(user, battle);
+}
+
+function canDownloadBattleAnswerSheet(user, battle) {
+  if (!user || !battle) return false;
   return canUserAccessBattle(user, battle);
 }
 
@@ -3889,6 +4268,14 @@ function dailyChartSubmissionCount(userId) {
   )).length;
 }
 
+function dailyBugReportCount(userId) {
+  const today = dayKeyUtc8(new Date());
+  return readJsonFile(BUG_REPORTS_FILE).filter((report) => (
+    report.userId === userId &&
+    dayKeyUtc8(new Date(report.createdAt)) === today
+  )).length;
+}
+
 function dayKeyUtc8(date) {
   return new Date(date.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
@@ -3946,11 +4333,301 @@ function countBattleSubmissions(battleId, phase = "") {
   )).length;
 }
 
-function sendBattleArchive(res, battle, options = {}) {
+async function buildParticipantInfoImage(battle, options = {}) {
+  ensureParticipantInfoFont();
+  const includeJackets = Boolean(options.includeJackets);
+  const entries = await collectParticipantInfoEntries(battle, includeJackets);
+  entries.sort((a, b) => a.songId.localeCompare(b.songId, "zh-CN"));
+  const layout = participantInfoLayout(includeJackets);
+  const rowMetrics = entries.map((entry) => participantInfoRowMetric(entry, layout));
+  const titleHeight = 96;
+  const headerHeight = 52;
+  const footerHeight = 34;
+  const height = Math.max(360, titleHeight + headerHeight + footerHeight + rowMetrics.reduce((sum, item) => sum + item.height, 0));
+  const image = PImage.make(layout.width, height);
+  const ctx = image.getContext("2d");
+  drawParticipantInfoBackground(ctx, layout.width, height);
+  drawParticipantInfoTitle(ctx, battle, layout, titleHeight);
+  drawParticipantInfoHeader(ctx, layout, titleHeight, headerHeight);
+  let y = titleHeight + headerHeight;
+  entries.forEach((entry, index) => {
+    drawParticipantInfoRow(ctx, entry, layout, y, rowMetrics[index].height, index);
+    y += rowMetrics[index].height;
+  });
+  if (!entries.length) {
+    ctx.font = `28 ${PARTICIPANT_INFO_FONT}`;
+    ctx.fillStyle = "#667085";
+    ctx.fillText("暂无参赛谱面", layout.margin, y + 58);
+  }
+  return encodeJpegBuffer(image, 92);
+}
+
+async function buildParticipantInfoCsv(battle) {
+  const entries = await collectParticipantInfoEntries(battle, false);
+  entries.sort((a, b) => a.songId.localeCompare(b.songId, "zh-CN"));
+  const rows = [
+    ["songid", "曲目标题", "曲师", "难度", "谱师名义"],
+    ...entries.map((entry) => [
+      entry.songId,
+      entry.title,
+      entry.artist,
+      (entry.difficulties.length ? entry.difficulties.map((item) => item.text) : [""]).join("\n"),
+      (entry.designerLines.length ? entry.designerLines : [""]).join("\n")
+    ])
+  ];
+  return rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, "\"\"")}"`;
+}
+
+async function collectParticipantInfoEntries(battle, includeJackets) {
+  const submissions = readJsonFile(SUBMISSIONS_FILE)
+    .filter((submission) => submission.battleId === battle.id && submission.status === "approved" && submission.savedFileName)
+    .filter((submission) => fs.existsSync(uploadPath(submission.savedFileName)));
+  const entries = [];
+  const usedSongIds = new Set();
+  for (const submission of submissions) {
+    try {
+      const zipEntries = readZipEntries(fs.readFileSync(uploadPath(submission.savedFileName)));
+      const songlistResult = parseSonglistEntry(zipEntries);
+      if (!songlistResult.ok) continue;
+      const songlist = songlistResult.value;
+      const displaySongId = allocateArchiveFolderName(clean(songlist.id) || submission.songId, usedSongIds, submission);
+      const info = participantInfoFromSonglist(songlist, displaySongId);
+      let jacket = null;
+      if (includeJackets) {
+        const baseJacket = findZipEntryByBaseName(zipEntries, "base.jpg");
+        if (baseJacket && isJpeg(baseJacket.data)) {
+          try {
+            jacket = await PImage.decodeJPEGFromStream(Readable.from(baseJacket.data));
+          } catch {
+            jacket = null;
+          }
+        }
+      }
+      entries.push({ ...info, jacket });
+    } catch {
+      /* Skip broken legacy files while generating the info sheet. */
+    }
+  }
+  return entries;
+}
+
+function participantInfoFromSonglist(songlist, displaySongId = "") {
+  const difficulties = participantInfoDifficulties(songlist);
+  const designers = difficulties.map((item) => item.chartDesigner).filter(Boolean);
+  const uniqueDesigners = Array.from(new Set(designers));
+  return {
+    songId: displaySongId || clean(songlist.id),
+    title: clean(songlist.title || firstLocalizedTitle(songlist.title_localized) || songlist.id || ""),
+    artist: clean(songlist.artist || ""),
+    difficulties,
+    designerLines: uniqueDesigners.length <= 1
+      ? [uniqueDesigners[0] || ""]
+      : difficulties.map((item) => item.chartDesigner || "")
+  };
+}
+
+function firstLocalizedTitle(localized) {
+  if (!localized || typeof localized !== "object") return "";
+  const values = Object.values(localized).filter((value) => clean(value));
+  return values.length ? clean(values[0]) : "";
+}
+
+function participantInfoDifficulties(songlist) {
+  const labels = new Map([[2, "Future"], [3, "Beyond"], [4, "Eternal"]]);
+  return (Array.isArray(songlist?.difficulties) ? songlist.difficulties : [])
+    .filter((item) => labels.has(Number(item.ratingClass)))
+    .sort((a, b) => Number(a.ratingClass) - Number(b.ratingClass))
+    .filter((item) => Number(item.rating) !== -1 || Number(item.ratingClass) !== 2)
+    .map((item) => {
+      const rating = Number(item.rating);
+      return {
+        label: labels.get(Number(item.ratingClass)),
+        text: `${labels.get(Number(item.ratingClass))} ${rating === -1 ? "?" : `${rating}${item.ratingPlus ? "+" : ""}`}`,
+        chartDesigner: clean(item.chartDesigner || "")
+      };
+    });
+}
+
+const PARTICIPANT_INFO_FONT = "AABParticipantFont";
+let participantInfoFontLoaded = false;
+
+function ensureParticipantInfoFont() {
+  if (participantInfoFontLoaded) return;
+  const candidates = [
+    process.env.AAB_FONT_PATH,
+    "C:\\Windows\\Fonts\\simhei.ttf",
+    "C:\\Windows\\Fonts\\msyh.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+  ].filter(Boolean);
+  for (const fontPath of candidates) {
+    if (!fs.existsSync(fontPath)) continue;
+    try {
+      PImage.registerFont(fontPath, PARTICIPANT_INFO_FONT).loadSync();
+      participantInfoFontLoaded = true;
+      return;
+    } catch {
+      /* Try the next font. */
+    }
+  }
+  participantInfoFontLoaded = true;
+}
+
+function participantInfoLayout(includeJackets) {
+  const margin = 44;
+  const jacketWidth = includeJackets ? 112 : 0;
+  const columns = [
+    ...(includeJackets ? [{ key: "jacket", label: "", width: jacketWidth }] : []),
+    { key: "songId", label: "songid", width: 170 },
+    { key: "title", label: "曲目标题", width: 330 },
+    { key: "artist", label: "曲师", width: 230 },
+    { key: "difficulty", label: "难度", width: 200 },
+    { key: "designer", label: "谱师名义", width: 430 }
+  ];
+  const width = margin * 2 + columns.reduce((sum, column) => sum + column.width, 0);
+  let x = margin;
+  columns.forEach((column) => {
+    column.x = x;
+    x += column.width;
+  });
+  return { width, margin, columns, lineHeight: 24, rowPadding: 12 };
+}
+
+function participantInfoRowMetric(entry, layout) {
+  const titleLines = wrapTextForWidth(entry.title, 18, layout.columns.find((item) => item.key === "title").width - 22);
+  const artistLines = wrapTextForWidth(entry.artist, 18, layout.columns.find((item) => item.key === "artist").width - 22);
+  const songIdLines = wrapTextForWidth(entry.songId, 18, layout.columns.find((item) => item.key === "songId").width - 22);
+  const difficultyLines = wrapTextLinesForWidth(entry.difficulties.length ? entry.difficulties.map((item) => item.text) : [""], 18, layout.columns.find((item) => item.key === "difficulty").width - 22);
+  const designerLines = wrapTextLinesForWidth(entry.designerLines.length ? entry.designerLines : [""], 18, layout.columns.find((item) => item.key === "designer").width - 22);
+  const textLines = Math.max(1, songIdLines.length, titleLines.length, artistLines.length, difficultyLines.length, designerLines.length);
+  const jacketColumn = layout.columns.some((item) => item.key === "jacket");
+  return { height: Math.max(jacketColumn ? 104 : 0, layout.rowPadding * 2 + textLines * layout.lineHeight) };
+}
+
+function drawParticipantInfoBackground(ctx, width, height) {
+  ctx.fillStyle = "#f5f7fb";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(24, 24, width - 48, height - 48);
+}
+
+function drawParticipantInfoTitle(ctx, battle, layout) {
+  ctx.fillStyle = "#18212f";
+  ctx.font = `34 ${PARTICIPANT_INFO_FONT}`;
+  ctx.fillText(`${battle.title}参赛信息`, layout.margin, 68);
+}
+
+function drawParticipantInfoHeader(ctx, layout, y, height) {
+  ctx.fillStyle = "#176b87";
+  ctx.fillRect(layout.margin, y, layout.width - layout.margin * 2, height);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `18 ${PARTICIPANT_INFO_FONT}`;
+  layout.columns.forEach((column) => {
+    if (column.label) ctx.fillText(column.label, column.x + 10, y + 33);
+  });
+}
+
+function drawParticipantInfoRow(ctx, entry, layout, y, height, index) {
+  ctx.fillStyle = index % 2 === 0 ? "#ffffff" : "#f8fafc";
+  ctx.fillRect(layout.margin, y, layout.width - layout.margin * 2, height);
+  ctx.strokeStyle = "#d9dee8";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(layout.margin, y, layout.width - layout.margin * 2, height);
+  layout.columns.forEach((column) => {
+    ctx.strokeStyle = "#e4e7ec";
+    ctx.strokeRect(column.x, y, column.width, height);
+  });
+  const textTop = y + 12;
+  const lineHeight = layout.lineHeight;
+  ctx.fillStyle = "#18212f";
+  ctx.font = `18 ${PARTICIPANT_INFO_FONT}`;
+  layout.columns.forEach((column) => {
+    if (column.key === "jacket") {
+      drawParticipantJacket(ctx, entry.jacket, column.x + 12, y + Math.max(8, Math.floor((height - 88) / 2)), 88);
+      return;
+    }
+    let lines = [];
+    if (column.key === "songId") lines = wrapTextForWidth(entry.songId, 18, column.width - 22);
+    if (column.key === "title") lines = wrapTextForWidth(entry.title, 18, column.width - 22);
+    if (column.key === "artist") lines = wrapTextForWidth(entry.artist, 18, column.width - 22);
+    if (column.key === "difficulty") lines = wrapTextLinesForWidth(entry.difficulties.length ? entry.difficulties.map((item) => item.text) : [""], 18, column.width - 22);
+    if (column.key === "designer") lines = wrapTextLinesForWidth(entry.designerLines.length ? entry.designerLines : [""], 18, column.width - 22);
+    ctx.fillStyle = "#18212f";
+    ctx.font = `18 ${PARTICIPANT_INFO_FONT}`;
+    lines.forEach((line, lineIndex) => {
+      ctx.fillText(line, column.x + 10, textTop + lineIndex * lineHeight + 17);
+    });
+  });
+}
+
+function drawParticipantJacket(ctx, jacket, x, y, size) {
+  ctx.fillStyle = "#eef2f7";
+  ctx.fillRect(x, y, size, size);
+  if (jacket) ctx.drawImage(jacket, 0, 0, jacket.width, jacket.height, x, y, size, size);
+  ctx.strokeStyle = "#d9dee8";
+  ctx.strokeRect(x, y, size, size);
+}
+
+function wrapTextForWidth(text, fontSize, maxWidth) {
+  const value = clean(text);
+  if (!value) return [""];
+  return wrapTextLinesForWidth(String(value).replace(/\\n/g, "\n").split(/\r?\n/), fontSize, maxWidth);
+}
+
+function wrapTextLinesForWidth(lines, fontSize, maxWidth) {
+  const approximateCharWidth = fontSize * 0.62;
+  const maxChars = Math.max(4, Math.floor(maxWidth / approximateCharWidth));
+  const wrapped = [];
+  (Array.isArray(lines) ? lines : [lines]).forEach((line) => {
+    const value = clean(line);
+    if (!value) {
+      wrapped.push("");
+      return;
+    }
+    String(value).replace(/\\n/g, "\n").split(/\r?\n/).forEach((part) => {
+      let current = "";
+      Array.from(part).forEach((char) => {
+        if ((current + char).length > maxChars) {
+          wrapped.push(current);
+          current = char;
+        } else {
+          current += char;
+        }
+      });
+      wrapped.push(current);
+    });
+  });
+  return wrapped.length ? wrapped : [""];
+}
+
+function encodeJpegBuffer(image, quality = 90) {
+  return new Promise((resolve, reject) => {
+    const stream = new PassThrough();
+    const chunks = [];
+    stream.on("data", (chunk) => chunks.push(chunk));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", reject);
+    PImage.encodeJPEGToStream(image, stream, quality).catch(reject);
+  });
+}
+
+function contentDisposition(fileName) {
+  const fallback = sanitizeFileName(fileName).replace(/[^\x20-\x7e]/g, "_") || "download";
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
+async function sendBattleArchive(res, battle, options = {}) {
   const normalizedChecks = normalizeOptionalChecks(battle.optionalChecks);
-  const useExpandedArchive = Boolean(normalizedChecks.aafAccNormalize);
+  const useExpandedArchive = Boolean(normalizedChecks.aafAccNormalize && !options.rawArchive);
   const files = useExpandedArchive
-    ? buildExpandedBattleArchiveFiles(battle, options)
+    ? await buildExpandedBattleArchiveFiles(battle, options)
     : buildPackedBattleArchiveFiles(battle, options);
   const archive = createZipArchive(files);
   res.writeHead(200, {
@@ -3975,7 +4652,9 @@ function buildPackedBattleArchiveFiles(battle, options = {}) {
     .map((file) => ({ name: file.name, data: fs.readFileSync(file.filePath) }));
 }
 
-function buildExpandedBattleArchiveFiles(battle, options = {}) {
+async function buildExpandedBattleArchiveFiles(battle, options = {}) {
+  const applySonglistMerge = Boolean(options.applySonglistMerge);
+  const autoCropPreview = Boolean(options.autoCropPreview);
   const submissions = readJsonFile(SUBMISSIONS_FILE)
     .filter((submission) => (
       submission.battleId === battle.id &&
@@ -3985,23 +4664,130 @@ function buildExpandedBattleArchiveFiles(battle, options = {}) {
     .filter((submission) => fs.existsSync(uploadPath(submission.savedFileName)));
   const usedFolderNames = new Set();
   const files = [];
-  submissions.forEach((submission) => {
+  const mergedSonglists = [];
+  for (const submission of submissions) {
     const zipBuffer = fs.readFileSync(uploadPath(submission.savedFileName));
     const zipEntries = readZipEntries(zipBuffer);
     const songlistEntry = findSonglistEntry(zipEntries);
     const folderName = allocateArchiveFolderName(submission.songId, usedFolderNames, submission);
+    const rebuiltSonglist = applySonglistMerge ? rebuildSonglistArchiveValue(songlistEntry, folderName) : null;
+    if (rebuiltSonglist) mergedSonglists.push(rebuiltSonglist);
+    const previewEntry = autoCropPreview ? await buildPreviewArchiveEntry(zipEntries, songlistEntry) : null;
     zipEntries.forEach((entry) => {
       const entryPath = normalizeArchiveEntryName(entry.name);
       if (!entryPath) return;
+      if (entryPath.toLowerCase() === "preview.ogg") return;
       const outputName = `${folderName}/${entryPath}`;
-      if (isSonglistArchiveEntry(entry)) {
-        files.push({ name: outputName, data: rebuildSonglistArchiveEntry(entry, folderName, songlistEntry) });
+      if (applySonglistMerge && isSonglistArchiveEntry(entry)) {
         return;
       }
       files.push({ name: outputName, data: entry.data });
     });
-  });
+    if (previewEntry) {
+      files.push({ name: `${folderName}/preview.ogg`, data: previewEntry });
+    }
+  }
+  if (applySonglistMerge) {
+    files.push({
+      name: "songlist",
+      data: Buffer.from(JSON.stringify({ songs: mergedSonglists }, null, 2), "utf8")
+    });
+  }
   return files;
+}
+
+async function buildPreviewArchiveEntry(zipEntries, songlistEntry) {
+  if (!songlistEntry) return null;
+  const baseOgg = findZipEntryByBaseName(zipEntries, "base.ogg");
+  if (!baseOgg) return null;
+  let songlist;
+  try {
+    songlist = JSON.parse(songlistEntry.data.toString("utf8").replace(/^\uFEFF/, ""));
+  } catch {
+    return null;
+  }
+  const previewStart = Number(songlist.audioPreview);
+  const previewEnd = Number(songlist.audioPreviewEnd);
+  if (!Number.isFinite(previewStart) || !Number.isFinite(previewEnd) || previewStart < 0 || previewEnd <= previewStart) return null;
+  const preview = await buildPreviewOggFromBase(baseOgg.data, previewStart, previewEnd);
+  return preview && preview.length ? preview : null;
+}
+
+async function buildPreviewOggFromBase(baseOggData, previewStartMs, previewEndMs) {
+  if (!baseOggData || !baseOggData.length) return null;
+  return buildPreviewOggWithFfmpeg(baseOggData, previewStartMs, previewEndMs);
+}
+
+function buildPreviewOggWithFfmpeg(baseOggData, previewStartMs, previewEndMs) {
+  const ffmpegBinary = resolveFfmpegBinary();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aab-preview-"));
+  const inputPath = path.join(tempDir, "base.ogg");
+  const outputPath = path.join(tempDir, "preview.ogg");
+  const startSeconds = previewStartMs / 1000;
+  const durationSeconds = (previewEndMs - previewStartMs) / 1000;
+  if (!Number.isFinite(startSeconds) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+  const fadeDuration = Math.min(1, durationSeconds / 2);
+  const fadeOutStart = Math.max(0, durationSeconds - fadeDuration);
+  try {
+    fs.writeFileSync(inputPath, baseOggData);
+    const result = spawnSync(ffmpegBinary, [
+      "-y",
+      "-loglevel",
+      "error",
+      "-i",
+      inputPath,
+      "-vn",
+      "-map",
+      "0:a:0",
+      "-af",
+      `atrim=start=${startSeconds}:end=${startSeconds + durationSeconds},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration},afade=t=out:st=${fadeOutStart}:d=${fadeDuration}`,
+      "-c:a",
+      "libvorbis",
+      "-q:a",
+      "5",
+      outputPath
+    ], { encoding: "utf8" });
+    if (!result.error && result.status === 0 && fs.existsSync(outputPath)) {
+      const preview = fs.readFileSync(outputPath);
+      if (preview.length) return preview;
+    }
+  } catch {
+    /* fall through to page-level OGG trimming */
+  } finally {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      /* ignore cleanup failures */
+    }
+  }
+  return null;
+}
+
+function resolveFfmpegBinary() {
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  const localRoot = path.join(ROOT, ".tools", "ffmpeg");
+  const localBinary = findFileByName(localRoot, process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+  return localBinary || "ffmpeg";
+}
+
+function findFileByName(rootDir, fileName) {
+  if (!fs.existsSync(rootDir)) return "";
+  const stack = [rootDir];
+  while (stack.length) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const entryPath = path.join(current, entry.name);
+      if (entry.isFile() && entry.name.toLowerCase() === fileName.toLowerCase()) return entryPath;
+      if (entry.isDirectory()) stack.push(entryPath);
+    }
+  }
+  return "";
 }
 
 function allocateArchiveFolderName(baseName, usedFolderNames, submission) {
@@ -4045,14 +4831,14 @@ function isSonglistArchiveEntry(entry) {
   return base === "songlist.json" || base === "songlist";
 }
 
-function rebuildSonglistArchiveEntry(entry, folderName, songlistEntry) {
-  if (!songlistEntry) return entry.data;
+function rebuildSonglistArchiveValue(songlistEntry, folderName) {
+  if (!songlistEntry) return null;
   try {
     const json = JSON.parse(songlistEntry.data.toString("utf8").replace(/^\uFEFF/, ""));
     json.id = folderName;
-    return Buffer.from(JSON.stringify(json, null, 2), "utf8");
+    return json;
   } catch {
-    return entry.data;
+    return null;
   }
 }
 

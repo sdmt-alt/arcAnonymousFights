@@ -60,6 +60,7 @@
             <label>合作上限<input name="collabLimit" type="number" min="0" placeholder="无限制"></label>
             <label>Bonus 上限<input name="bonusLimit" type="number" min="0" placeholder="无限制"></label>
           </div>
+          <label class="checkbox-row"><input name="provideWebsiteDownload" type="checkbox">提供网站下载</label>
           <fieldset>
             <legend>Bonus排除检查</legend>
             <label class="checkbox-row"><input name="durationEnabled" type="checkbox">启用曲目时长限制检查</label>
@@ -109,6 +110,7 @@
             <button class="ghost-button compact hidden" id="hostAddCustomDivisionButton" type="button">添加分组</button>
           </fieldset>
           <label>规则文档<input name="rules" type="file" accept=".pdf,application/pdf"></label>
+          <label>答题卡<input name="answerSheet" type="file"></label>
           <div class="button-row">
             <button type="submit">保存无名战设置</button>
           </div>
@@ -126,7 +128,7 @@
       <section class="panel" id="hostSubmissionPanel">
         <div class="panel-heading action-heading">
           <div><p class="eyebrow">All Charts</p><h2>全部提交谱面</h2></div>
-          <button type="button" id="hostDownloadArchiveButton">打包下载谱面</button>
+          <button class="download-button" type="button" id="hostDownloadArchiveButton">打包下载谱面</button>
         </div>
         <div class="scroll-box tall"><div class="submission-list" id="hostSubmissionList"></div></div>
       </section>
